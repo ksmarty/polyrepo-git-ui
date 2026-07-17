@@ -10,6 +10,7 @@
   let groups: RepoGroup[] = $state([]);
   let selectedRepo: Repository | null = $state(null);
   let currentTheme: string = $state('midnight');
+  let globalDefaultBranch: string = $state('main');
   let refreshingAll: boolean = $state(false);
   let refreshingRepo: string | null = $state(null);
   let editingDefaultBranch: boolean = $state(false);
@@ -28,8 +29,9 @@
   async function loadTheme() {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      const config = await invoke('get_config') as { theme: string };
+      const config = await invoke('get_config') as { theme: string; default_branch: string };
       currentTheme = config.theme;
+      globalDefaultBranch = config.default_branch || 'main';
       applyTheme(currentTheme);
     } catch (e) {
       console.error('Failed to load theme:', e);
@@ -247,7 +249,7 @@
                     </div>
                   {:else}
                     <button class="meta-value" onclick={startEditDefaultBranch}>
-                      {selectedRepo.default_branch ?? 'Not set (using global)'}
+                      {selectedRepo.default_branch ?? globalDefaultBranch}
                     </button>
                   {/if}
                 </div>
@@ -464,7 +466,9 @@
     height: 32px;
     background-color: var(--bg-tertiary);
     color: var(--text-secondary);
+    border: none;
     border-radius: 6px;
+    padding: 0;
   }
 
   .icon-btn:hover:not(:disabled) {

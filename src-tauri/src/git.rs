@@ -223,7 +223,32 @@ async fn is_dirty(path: &Path) -> Result<bool, String> {
 }
 
 async fn get_behind_ahead(path: &Path, current_branch: &str) -> Result<(u32, u32), String> {
-    let upstream = format!("origin/{}", current_branch);
+    // First check if branch has an upstream tracking branch
+    let upstream_output = Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", &format!("{}@{{upstream}}", current_branch)])
+        .current_dir(path)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to execute git rev-parse: {}", e))?;
+
+    let upstream = if upstream_output.status.success() {
+        String::from_utf8_lossy(&upstream_output.stdout).trim().to_string()
+    } else {
+        // No upstream set — compare against the default branch (origin/main or origin/master)
+        let mb_output = Command::new("git")
+            .args(["rev-parse", "--verify", "refs/remotes/origin/main"])
+            .current_dir(path)
+            .output()
+            .await
+            .unwrap_or_else(|_| std::process::Output { status: std::process::ExitStatus::default(), stdout: Vec::new(), stderr: Vec::new() });
+
+        let fallback = if mb_output.status.success() {
+            "origin/main".to_string()
+        } else {
+            "origin/master".to_string()
+        };
+        fallback
+    };
 
     let output = Command::new("git")
         .args(["rev-list", "--left-right", "--count", &format!("{}...{}", upstream, current_branch)])

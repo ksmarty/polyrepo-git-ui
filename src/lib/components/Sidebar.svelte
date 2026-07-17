@@ -25,6 +25,7 @@
 
   let dropTarget: string | null = $state(null);
   let dropPosition: 'before' | 'inside' | 'after' = $state('after');
+  let justDropped: boolean = $state(false);
 
   function toggleGroup(groupId: string) {
     const next = new Set(expandedGroups);
@@ -83,6 +84,11 @@
     }
   }
 
+  function handleRepoClick(repo: Repository) {
+    if (justDropped) return;
+    dispatch('select', repo);
+  }
+
   function handleImportComplete() {
     showImportModal = false;
     dispatch('dataChange');
@@ -103,6 +109,8 @@
   function onDragEnd() {
     dropTarget = null;
     dropPosition = 'after';
+    justDropped = true;
+    setTimeout(() => { justDropped = false; }, 300);
   }
 
   function onGroupDragOver(e: DragEvent, groupId: string) {
@@ -328,7 +336,7 @@
                         class:drop-above={dropTarget === repo.id && dropPosition === 'before'}
                         class:drop-below={dropTarget === repo.id && dropPosition === 'after'}
                         draggable="true"
-                        onclick={() => dispatch('select', repo)}
+                        onclick={() => handleRepoClick(repo)}
                         ondragstart={(e) => onRepoDragStart(e, repo.id)}
                         ondragend={onDragEnd}
                         ondragover={(e) => onRepoDragOver(e, repo.id, subGroup.id)}
@@ -350,7 +358,7 @@
                 class:drop-above={dropTarget === repo.id && dropPosition === 'before'}
                 class:drop-below={dropTarget === repo.id && dropPosition === 'after'}
                 draggable="true"
-                onclick={() => dispatch('select', repo)}
+                onclick={() => handleRepoClick(repo)}
                 ondragstart={(e) => onRepoDragStart(e, repo.id)}
                 ondragend={onDragEnd}
                 ondragover={(e) => onRepoDragOver(e, repo.id, group.id)}
@@ -381,7 +389,7 @@
             class:drop-above={dropTarget === repo.id && dropPosition === 'before'}
             class:drop-below={dropTarget === repo.id && dropPosition === 'after'}
             draggable="true"
-            onclick={() => dispatch('select', repo)}
+            onclick={() => handleRepoClick(repo)}
             ondragstart={(e) => onRepoDragStart(e, repo.id)}
             ondragend={onDragEnd}
             ondragover={(e) => onRepoDragOver(e, repo.id, null)}

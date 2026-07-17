@@ -9,7 +9,7 @@
   let repos: Repository[] = $state([]);
   let groups: RepoGroup[] = $state([]);
   let selectedRepo: Repository | null = $state(null);
-  let currentTheme: string = $state('dark');
+  let currentTheme: string = $state('midnight');
 
   async function loadRepos() {
     try {

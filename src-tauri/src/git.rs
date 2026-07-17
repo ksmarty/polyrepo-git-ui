@@ -245,9 +245,19 @@ async fn get_behind_ahead(path: &Path, current_branch: &str) -> Result<(u32, u32
 
 pub async fn scan_directory_for_repos(path: &str) -> Result<Vec<String>, String> {
     let dir = std::path::Path::new(path);
-    if !dir.exists() || !dir.is_dir() {
-        return Err("Path does not exist or is not a directory".to_string());
+    if !dir.exists() {
+        return Err("Path does not exist".to_string());
     }
+
+    // If the path itself is a git repo, return it directly
+    if dir.is_dir() && dir.join(".git").exists() {
+        return Ok(vec![dir.to_string_lossy().to_string()]);
+    }
+
+    if !dir.is_dir() {
+        return Err("Path is not a directory".to_string());
+    }
+
     let mut repos = Vec::new();
     let entries = std::fs::read_dir(dir).map_err(|e| format!("Failed to read directory: {}", e))?;
     for entry in entries {

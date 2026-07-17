@@ -31,6 +31,7 @@
       const result = await open({ directory: true });
       if (result && typeof result === 'string') {
         selectedPath = result;
+        await scanDirectory();
       }
     } catch (e) {
       console.error('Failed to open dialog:', e);
@@ -45,7 +46,7 @@
       const { invoke } = await import('@tauri-apps/api/core');
       discoveredRepos = await invoke('scan_directory_for_repos', { path: selectedPath });
       if (discoveredRepos.length === 0) {
-        error = 'No git repositories found in this directory';
+        error = 'No git repositories found at this path';
         step = 'choose';
         return;
       }
@@ -59,12 +60,13 @@
   }
 
   function toggleRepo(path: string) {
-    if (selectedRepos.has(path)) {
-      selectedRepos.delete(path);
+    const next = new Set(selectedRepos);
+    if (next.has(path)) {
+      next.delete(path);
     } else {
-      selectedRepos.add(path);
+      next.add(path);
     }
-    selectedRepos = selectedRepos;
+    selectedRepos = next;
   }
 
   function selectAll() {
@@ -113,8 +115,8 @@
 
       {#if step === 'choose'}
         <p class="description">
-          Select a parent folder containing your git repositories.
-          The app will scan one level deep for repos.
+          Select a parent folder containing git repositories,
+          or a single git repo. The app will scan for repos automatically.
         </p>
 
         <div class="path-input">
@@ -135,7 +137,7 @@
           onclick={scanDirectory}
           disabled={!selectedPath}
         >
-          Scan for Repos
+          Scan
         </button>
 
       {:else if step === 'scanning'}

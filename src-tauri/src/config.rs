@@ -18,7 +18,7 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             default_branch: "main".to_string(),
-            theme: "system".to_string(),
+            theme: "midnight".to_string(),
             auto_fetch_on_open: true,
             fetch_interval_seconds: 300,
             sidebar_width: 300,
@@ -88,7 +88,7 @@ mod tests {
     fn test_app_config_default() {
         let config = AppConfig::default();
         assert_eq!(config.default_branch, "main");
-        assert_eq!(config.theme, "system");
+        assert_eq!(config.theme, "midnight");
         assert!(config.auto_fetch_on_open);
         assert_eq!(config.fetch_interval_seconds, 300);
         assert_eq!(config.sidebar_width, 300);
@@ -128,7 +128,7 @@ mod tests {
         let config = Config::default();
         let toml_str = toml::to_string_pretty(&config).unwrap();
         let deserialized: Config = toml::from_str(&toml_str).unwrap();
-        assert_eq!(deserialized.app_config.theme, "system");
+        assert_eq!(deserialized.app_config.theme, "midnight");
         assert!(deserialized.repos.is_empty());
     }
 

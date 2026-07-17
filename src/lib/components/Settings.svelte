@@ -13,7 +13,7 @@
 
   let config: AppConfig = $state({
     default_branch: 'main',
-    theme: 'dark',
+    theme: 'midnight',
     auto_fetch_on_open: true,
     fetch_interval_seconds: 300,
     sidebar_width: 300,
@@ -25,17 +25,17 @@
   let newGroupName: string = $state('');
   let loading: boolean = $state(false);
   let error: string | null = $state(null);
-  let success: string | null = $state(null);
+  let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
   const themes = [
     { value: 'system', label: 'System' },
-    { value: 'dark', label: 'Flattered Sugar' },
-    { value: 'light', label: 'White Piglet' },
-    { value: 'midnight', label: 'Candy Grape' },
+    { value: 'catppuccin', label: 'Catppuccin' },
     { value: 'forest', label: 'Corona Forest' },
     { value: 'ocean', label: 'Fizzy Whirlpool' },
+    { value: 'dark', label: 'Flattered Sugar' },
     { value: 'solarized', label: 'Midnight Evening' },
-    { value: 'catppuccin', label: 'Catppuccin' },
+    { value: 'midnight', label: 'Candy Grape' },
+    { value: 'light', label: 'White Piglet' },
   ];
 
   onMount(async () => {
@@ -53,15 +53,17 @@
     }
   }
 
-  async function saveConfig() {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('update_config', { config });
-      dispatch('themeChange', config.theme);
-      showSuccess('Settings saved');
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to save settings';
-    }
+  function scheduleSave() {
+    if (saveTimeout) clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(async () => {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('update_config', { config });
+        dispatch('themeChange', config.theme);
+      } catch (e) {
+        error = e instanceof Error ? e.message : 'Failed to save settings';
+      }
+    }, 400);
   }
 
   async function loadRepos() {
@@ -92,7 +94,6 @@
       newRepoPath = '';
       await loadRepos();
       dispatch('dataChange');
-      showSuccess('Repo added successfully');
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to add repo';
     } finally {
@@ -106,7 +107,6 @@
       await invoke('remove_repo', { id });
       await loadRepos();
       dispatch('dataChange');
-      showSuccess('Repo removed');
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to remove repo';
     }
@@ -120,7 +120,6 @@
       newGroupName = '';
       await loadGroups();
       dispatch('dataChange');
-      showSuccess('Group created');
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to create group';
     }
@@ -132,7 +131,6 @@
       await invoke('delete_group', { id });
       await loadGroups();
       dispatch('dataChange');
-      showSuccess('Group deleted');
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to delete group';
     }
@@ -159,11 +157,6 @@
     } catch (e) {
       console.error('Failed to open folder dialog:', e);
     }
-  }
-
-  function showSuccess(message: string) {
-    success = message;
-    setTimeout(() => success = null, 3000);
   }
 </script>
 
@@ -211,12 +204,6 @@
       </div>
     {/if}
 
-    {#if success}
-      <div class="alert success">
-        <span>{success}</span>
-      </div>
-    {/if}
-
     {#if activeSection === 'general'}
       <div class="section">
         <h3>General</h3>
@@ -227,6 +214,7 @@
             id="default-branch"
             type="text"
             bind:value={config.default_branch}
+            oninput={scheduleSave}
             placeholder="main"
           />
           <p class="hint">Fallback branch when no per-repo override is set</p>
@@ -234,7 +222,7 @@
 
         <div class="form-group">
           <label for="theme">Theme</label>
-          <select id="theme" bind:value={config.theme}>
+          <select id="theme" bind:value={config.theme} onchange={scheduleSave}>
             {#each themes as t}
               <option value={t.value}>{t.label}</option>
             {/each}
@@ -246,6 +234,7 @@
             <input
               type="checkbox"
               bind:checked={config.auto_fetch_on_open}
+              onchange={scheduleSave}
             />
             Auto-fetch on open
           </label>
@@ -257,14 +246,11 @@
             id="fetch-interval"
             type="number"
             bind:value={config.fetch_interval_seconds}
+            oninput={scheduleSave}
             min="60"
             max="3600"
           />
         </div>
-
-        <button class="save-button" onclick={saveConfig}>
-          Save Settings
-        </button>
       </div>
 
     {:else if activeSection === 'repos'}
@@ -451,14 +437,6 @@
     opacity: 0.7;
   }
 
-  .save-button {
-    background-color: var(--accent);
-    color: white;
-    margin-top: 8px;
-    padding: 10px 24px;
-    font-weight: 600;
-  }
-
   .add-row {
     display: flex;
     gap: 8px;
@@ -579,12 +557,6 @@
     background-color: rgba(242, 95, 76, 0.1);
     border: 1px solid var(--danger);
     color: var(--danger);
-  }
-
-  .alert.success {
-    background-color: rgba(44, 182, 125, 0.1);
-    border: 1px solid var(--success);
-    color: var(--success);
   }
 
   .alert button {

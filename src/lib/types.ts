@@ -49,7 +49,7 @@ export interface GitHubAuth {
 
 export interface AppConfig {
   default_branch: string;
-  theme: 'system' | 'light' | 'dark';
+  theme: string;
   auto_fetch_on_open: boolean;
   fetch_interval_seconds: number;
   sidebar_width: number;

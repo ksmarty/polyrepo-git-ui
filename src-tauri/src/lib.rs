@@ -348,11 +348,18 @@ async fn clone_repo(
     url: String,
     path: String,
 ) -> Result<Repository, String> {
-    let default_branch = {
+    let (default_branch, token) = {
         let config = state.config.lock().await;
-        config.app_config.default_branch.clone()
+        (
+            config.app_config.default_branch.clone(),
+            config.github_auth.token.clone(),
+        )
     };
-    git::clone_repo(&url, &path, Some(&default_branch)).await
+    let repo = git::clone_repo(&url, &path, Some(&default_branch), token.as_deref()).await?;
+    let mut config = state.config.lock().await;
+    config.repos.push(repo.clone());
+    config.save().map_err(|e| e.to_string())?;
+    Ok(repo)
 }
 
 #[tauri::command]

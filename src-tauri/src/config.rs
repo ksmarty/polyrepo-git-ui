@@ -8,6 +8,7 @@ use crate::models::{GitHubAuth, RepoGroup, Repository};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AppConfig {
     pub default_branch: String,
+    pub default_repo_location: String,
     pub theme: String,
     pub auto_fetch_on_open: bool,
     pub fetch_interval_seconds: u32,
@@ -16,8 +17,12 @@ pub struct AppConfig {
 
 impl Default for AppConfig {
     fn default() -> Self {
+        let default_repo_location = dirs::home_dir()
+            .map(|d| d.join("Projects").to_string_lossy().to_string())
+            .unwrap_or_else(|| "~/Projects".to_string());
         Self {
             default_branch: "main".to_string(),
+            default_repo_location,
             theme: "midnight".to_string(),
             auto_fetch_on_open: true,
             fetch_interval_seconds: 300,
@@ -88,6 +93,7 @@ mod tests {
     fn test_app_config_default() {
         let config = AppConfig::default();
         assert_eq!(config.default_branch, "main");
+        assert!(!config.default_repo_location.is_empty());
         assert_eq!(config.theme, "midnight");
         assert!(config.auto_fetch_on_open);
         assert_eq!(config.fetch_interval_seconds, 300);
@@ -98,6 +104,7 @@ mod tests {
     fn test_app_config_serialize_deserialize() {
         let config = AppConfig {
             default_branch: "develop".to_string(),
+            default_repo_location: "/Users/test/Projects".to_string(),
             theme: "midnight".to_string(),
             auto_fetch_on_open: false,
             fetch_interval_seconds: 600,
@@ -108,6 +115,7 @@ mod tests {
         let deserialized: AppConfig = toml::from_str(&toml_str).unwrap();
 
         assert_eq!(deserialized.default_branch, "develop");
+        assert_eq!(deserialized.default_repo_location, "/Users/test/Projects");
         assert_eq!(deserialized.theme, "midnight");
         assert!(!deserialized.auto_fetch_on_open);
         assert_eq!(deserialized.fetch_interval_seconds, 600);

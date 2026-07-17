@@ -307,10 +307,22 @@ pub async fn clone_repo(
     url: &str,
     path: &str,
     default_branch: Option<&str>,
+    token: Option<&str>,
 ) -> Result<Repository, String> {
+    let effective_url = if let Some(t) = token {
+        // Inject token into HTTPS GitHub URLs for private repo access
+        if url.starts_with("https://github.com/") {
+            url.replacen("https://github.com/", &format!("https://x-access-token:{}@github.com/", t), 1)
+        } else {
+            url.to_string()
+        }
+    } else {
+        url.to_string()
+    };
+
     let output = Command::new("git")
         .arg("clone")
-        .arg(url)
+        .arg(&effective_url)
         .arg(path)
         .output()
         .await

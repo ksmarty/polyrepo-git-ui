@@ -65,8 +65,8 @@
   async function openInVSCode() {
     if (!app.selectedRepo) return;
     try {
-      const { open } = await import('@tauri-apps/plugin-shell');
-      await open(app.selectedRepo.path, 'code');
+      const { Command } = await import('@tauri-apps/plugin-shell');
+      await Command.create('open', ['-a', 'Visual Studio Code', app.selectedRepo.path]).execute();
     } catch (e) {
       console.error('Failed to open VSCode:', e);
     }
@@ -75,8 +75,8 @@
   async function openInIntelliJ() {
     if (!app.selectedRepo) return;
     try {
-      const { open } = await import('@tauri-apps/plugin-shell');
-      await open(app.selectedRepo.path, 'idea');
+      const { Command } = await import('@tauri-apps/plugin-shell');
+      await Command.create('open', ['-a', 'IntelliJ IDEA', app.selectedRepo.path]).execute();
     } catch (e) {
       console.error('Failed to open IntelliJ:', e);
     }
@@ -326,9 +326,9 @@
 
 {#if showRepoInfo && app.selectedRepo}
   <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-  <div class="modal-overlay" onclick={() => showRepoInfo = false}>
+  <div class="modal-overlay" onclick={() => showRepoInfo = false} onkeydown={(e) => e.key === 'Escape' && (showRepoInfo = false)}>
     <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-    <div class="modal-content" onclick={(e) => e.stopPropagation()}>
+    <div class="modal-content" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
       <div class="modal-header">
         <h3>
           <Info size={18} />
@@ -339,6 +339,7 @@
         </button>
       </div>
       <div class="modal-body">
+        <div class="info-section-label">Information</div>
         <div class="info-rows">
           <div class="info-row">
             <span class="info-label">Path</span>
@@ -348,6 +349,18 @@
             <span class="info-label">Current Branch</span>
             <span class="info-value mono">{app.selectedRepo.current_branch}</span>
           </div>
+          {#if app.selectedRepo.remote_url}
+            <div class="info-row">
+              <span class="info-label">Remote</span>
+              <span class="info-value mono">{app.selectedRepo.remote_url}</span>
+            </div>
+          {/if}
+        </div>
+
+        <div class="info-divider"></div>
+
+        <div class="info-section-label">Settings</div>
+        <div class="info-rows">
           <div class="info-row">
             <span class="info-label">Default Branch</span>
             {#if editingDefaultBranch}
@@ -367,15 +380,11 @@
             {:else}
               <button class="info-value editable" onclick={() => { editingDefaultBranch = true; newDefaultBranch = app.selectedRepo?.default_branch ?? ''; }}>
                 {app.selectedRepo.default_branch ?? app.config.default_branch}
+                <span class="edit-hint">(click to edit)</span>
               </button>
             {/if}
+            <p class="info-hint">Override the global default branch for this repo</p>
           </div>
-          {#if app.selectedRepo.remote_url}
-            <div class="info-row">
-              <span class="info-label">Remote</span>
-              <span class="info-value mono">{app.selectedRepo.remote_url}</span>
-            </div>
-          {/if}
         </div>
       </div>
     </div>
@@ -384,9 +393,9 @@
 
 {#if app.showMergeConflict && app.mergeResult}
   <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-  <div class="modal-overlay" onclick={() => app.showMergeConflict = false}>
+  <div class="modal-overlay" onclick={() => app.showMergeConflict = false} onkeydown={(e) => e.key === 'Escape' && (app.showMergeConflict = false)}>
     <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-    <div class="modal-content" onclick={(e) => e.stopPropagation()}>
+    <div class="modal-content" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
       <div class="modal-header">
         <h3>
           <AlertTriangle size={18} />
@@ -734,6 +743,35 @@
 
   .info-value.editable:hover {
     background-color: var(--bg-tertiary);
+  }
+
+  .info-section-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 10px;
+  }
+
+  .info-divider {
+    height: 1px;
+    background-color: var(--border);
+    margin: 16px 0;
+  }
+
+  .edit-hint {
+    font-size: 11px;
+    color: var(--text-secondary);
+    opacity: 0.6;
+    margin-left: 6px;
+  }
+
+  .info-hint {
+    font-size: 12px;
+    color: var(--text-secondary);
+    opacity: 0.7;
+    margin-top: 4px;
   }
 
   .git-history {

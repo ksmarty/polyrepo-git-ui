@@ -13,6 +13,7 @@
 
   let config: AppConfig = $state({
     default_branch: 'main',
+    default_repo_location: '',
     theme: 'midnight',
     auto_fetch_on_open: true,
     fetch_interval_seconds: 300,
@@ -111,6 +112,19 @@
       console.error('Failed to open folder dialog:', e);
     }
   }
+
+  async function browseRepoLocation() {
+    try {
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      const selected = await open({ directory: true });
+      if (selected && typeof selected === 'string') {
+        config.default_repo_location = selected;
+        scheduleSave();
+      }
+    } catch (e) {
+      console.error('Failed to open folder dialog:', e);
+    }
+  }
 </script>
 
 <div class="settings-layout">
@@ -163,6 +177,21 @@
             placeholder="main"
           />
           <p class="hint">Fallback branch when no per-repo override is set</p>
+        </div>
+
+        <div class="form-group">
+          <label for="default-repo-location">Default Repo Location</label>
+          <div class="location-row">
+            <input
+              id="default-repo-location"
+              type="text"
+              bind:value={config.default_repo_location}
+              oninput={scheduleSave}
+              placeholder="~/Projects"
+            />
+            <button class="secondary-btn" onclick={browseRepoLocation}>Browse</button>
+          </div>
+          <p class="hint">Where new repos are cloned to by default</p>
         </div>
 
         <div class="form-group">
@@ -331,6 +360,17 @@
     max-width: 300px;
   }
 
+  .location-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .location-row input {
+    flex: 1;
+    max-width: none;
+  }
+
   .hint {
     font-size: 12px;
     color: var(--text-secondary);
@@ -412,12 +452,6 @@
     display: flex;
     gap: 8px;
     align-items: center;
-  }
-
-  .item-actions select {
-    min-width: 120px;
-    font-size: 13px;
-    padding: 4px 8px;
   }
 
   .danger-btn-sm {

@@ -1,13 +1,15 @@
 <script lang="ts">
   import ImportModal from './ImportModal.svelte';
+  import CloneModal from './CloneModal.svelte';
   import Sortable from 'sortablejs';
-  import { Search, Plus, FolderPlus, ChevronRight, ChevronDown, GitBranch, Filter } from '@lucide/svelte';
+  import { Search, Plus, FolderPlus, ChevronRight, ChevronDown, GitBranch, Filter, Download } from '@lucide/svelte';
   import { app } from '../stores.svelte';
   import type { Repository, RepoGroup } from '../types';
 
   let expandedGroups: Set<string> = $state(new Set());
   let searchQuery: string = $state('');
   let showImportModal: boolean = $state(false);
+  let showCloneModal: boolean = $state(false);
   let showNewGroupInput: boolean = $state(false);
   let newGroupName: string = $state('');
   let isDraggingRepo: boolean = $state(false);
@@ -85,6 +87,11 @@
 
   function handleImportComplete() {
     showImportModal = false;
+    app.loadAll();
+  }
+
+  function handleCloneComplete() {
+    showCloneModal = false;
     app.loadAll();
   }
 
@@ -308,6 +315,10 @@
       >
         <Filter size={14} />
       </button>
+      <button class="action-btn" onclick={() => showCloneModal = true} title="Clone a repo">
+        <Download size={14} />
+        <span>Clone</span>
+      </button>
       <button class="action-btn" onclick={() => showImportModal = true} title="Import repos">
         <Plus size={16} />
         <span>Import</span>
@@ -517,6 +528,13 @@
   <ImportModal
     on:close={() => showImportModal = false}
     on:complete={handleImportComplete}
+  />
+{/if}
+
+{#if showCloneModal}
+  <CloneModal
+    on:close={() => showCloneModal = false}
+    on:complete={handleCloneComplete}
   />
 {/if}
 

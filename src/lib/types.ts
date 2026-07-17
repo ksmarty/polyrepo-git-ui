@@ -50,6 +50,7 @@ export interface GitHubAuth {
 
 export interface AppConfig {
   default_branch: string;
+  default_repo_location: string;
   theme: string;
   auto_fetch_on_open: boolean;
   fetch_interval_seconds: number;

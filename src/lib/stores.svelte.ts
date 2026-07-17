@@ -86,6 +86,16 @@ class AppState {
     }
   }
 
+  async pullRepo(id: string, rebase: boolean = false) {
+    try {
+      await api.pullRepo(id, rebase);
+      await this.refreshRepo(id);
+      await this.loadGitLog(id);
+    } catch (e) {
+      console.error('Failed to pull repo:', e);
+    }
+  }
+
   async mergeRepo(id: string) {
     this.mergingRepo = id;
     this.mergeResult = null;

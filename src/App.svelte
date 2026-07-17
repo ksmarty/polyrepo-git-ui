@@ -4,7 +4,7 @@
   import Settings from './lib/components/Settings.svelte';
   import { app } from './lib/stores.svelte';
   import type { Repository } from './lib/types';
-  import { FolderGit2, GitPullRequest, Settings as SettingsIcon, RefreshCw, Download, ExternalLink, GitMerge, History, AlertTriangle, X, Code, CircleDot, Info } from '@lucide/svelte';
+  import { FolderGit2, GitPullRequest, Settings as SettingsIcon, RefreshCw, Download, ExternalLink, GitMerge, History, AlertTriangle, X, Code, CircleDot, Info, ArrowDownToLine } from '@lucide/svelte';
 
   let activeTab: 'repos' | 'prs' | 'settings' = $state('repos');
   let expandedCommit: string | null = $state(null);
@@ -184,6 +184,14 @@
                     <Download size={14} />
                     <span>Fetch</span>
                   </button>
+                  <button
+                    class="action-btn"
+                    onclick={() => app.pullRepo(app.selectedRepo!.id)}
+                    title="Pull latest changes"
+                  >
+                    <ArrowDownToLine size={14} />
+                    <span>Pull</span>
+                  </button>
                   {#if app.selectedRepo.sync_status && app.selectedRepo.sync_status.behind > 0}
                     <button
                       class="action-btn merge-btn"
@@ -328,7 +336,7 @@
   <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
   <div class="modal-overlay" onclick={() => showRepoInfo = false} onkeydown={(e) => e.key === 'Escape' && (showRepoInfo = false)}>
     <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-    <div class="modal-content" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+    <div class="modal-content" onclick={(e) => e.stopPropagation()} onkeydown={(e) => { if (e.key === 'Escape') { showRepoInfo = false; } else { e.stopPropagation(); } }}>
       <div class="modal-header">
         <h3>
           <Info size={18} />
@@ -395,7 +403,7 @@
   <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
   <div class="modal-overlay" onclick={() => app.showMergeConflict = false} onkeydown={(e) => e.key === 'Escape' && (app.showMergeConflict = false)}>
     <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-    <div class="modal-content" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+    <div class="modal-content" onclick={(e) => e.stopPropagation()} onkeydown={(e) => { if (e.key === 'Escape') { app.showMergeConflict = false; } else { e.stopPropagation(); } }}>
       <div class="modal-header">
         <h3>
           <AlertTriangle size={18} />

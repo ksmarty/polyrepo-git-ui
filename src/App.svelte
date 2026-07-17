@@ -45,10 +45,10 @@
     }
   }
 
-  async function handleRepoSelect(event: CustomEvent<Repository>) {
-    const repo = event.detail;
+  function handleRepoSelect(event: CustomEvent<Repository>) {
+    selectedRepo = event.detail;
     activeTab = 'repos';
-    await refreshRepo(repo.id);
+    refreshRepo(event.detail.id);
   }
 
   async function refreshRepo(id: string) {

@@ -14,6 +14,7 @@ export interface Repository {
   github_repo: string | null;
   default_branch: string | null;
   group_id: string | null;
+  order: number;
   local_branches: string[];
   current_branch: string;
   sync_status: SyncStatus | null;

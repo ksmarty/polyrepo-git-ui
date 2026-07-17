@@ -23,17 +23,23 @@
   let showNewGroupInput: boolean = $state(false);
   let newGroupName: string = $state('');
 
+  let dropTarget: string | null = $state(null);
+  let dropPosition: 'before' | 'inside' | 'after' = $state('after');
+
   function toggleGroup(groupId: string) {
-    if (expandedGroups.has(groupId)) {
-      expandedGroups.delete(groupId);
+    const next = new Set(expandedGroups);
+    if (next.has(groupId)) {
+      next.delete(groupId);
     } else {
-      expandedGroups.add(groupId);
+      next.add(groupId);
     }
-    expandedGroups = expandedGroups;
+    expandedGroups = next;
   }
 
   function getReposInGroup(groupId: string | null): Repository[] {
-    return repos.filter(r => r.group_id === groupId);
+    return repos
+      .filter(r => r.group_id === groupId)
+      .sort((a, b) => a.order - b.order);
   }
 
   function getSubGroups(parentId: string | null): RepoGroup[] {
@@ -81,6 +87,152 @@
     showImportModal = false;
     dispatch('dataChange');
   }
+
+  function onRepoDragStart(e: DragEvent, repoId: string) {
+    if (!e.dataTransfer) return;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'repo', id: repoId }));
+  }
+
+  function onGroupDragStart(e: DragEvent, groupId: string) {
+    if (!e.dataTransfer) return;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'group', id: groupId }));
+  }
+
+  function onDragEnd() {
+    dropTarget = null;
+    dropPosition = 'after';
+  }
+
+  function onGroupDragOver(e: DragEvent, groupId: string) {
+    e.preventDefault();
+    if (!e.dataTransfer) return;
+    e.dataTransfer.dropEffect = 'move';
+    dropTarget = groupId;
+    dropPosition = 'inside';
+  }
+
+  function onGroupDragLeave() {
+    if (dropTarget) {
+      dropTarget = null;
+      dropPosition = 'after';
+    }
+  }
+
+  async function onGroupDrop(e: DragEvent, targetGroupId: string) {
+    e.preventDefault();
+    if (!e.dataTransfer) return;
+    const raw = e.dataTransfer.getData('text/plain');
+    if (!raw) return;
+    try {
+      const data = JSON.parse(raw);
+      const { invoke } = await import('@tauri-apps/api/core');
+      if (data.type === 'repo') {
+        await invoke('move_repo_to_group', { repoId: data.id, groupId: targetGroupId });
+        dispatch('dataChange');
+      } else if (data.type === 'group' && data.id !== targetGroupId) {
+        const allGroupIds = groups
+          .filter(g => g.parent_id === null)
+          .sort((a, b) => a.order - b.order)
+          .map(g => g.id);
+        const fromIdx = allGroupIds.indexOf(data.id);
+        const toIdx = allGroupIds.indexOf(targetGroupId);
+        if (fromIdx !== -1 && toIdx !== -1) {
+          allGroupIds.splice(fromIdx, 1);
+          allGroupIds.splice(toIdx, 0, data.id);
+          await invoke('reorder_groups', { groupIds: allGroupIds });
+          dispatch('dataChange');
+        }
+      }
+    } catch (err) {
+      console.error('Drop failed:', err);
+    }
+    onDragEnd();
+  }
+
+  function onUngroupedDragOver(e: DragEvent) {
+    e.preventDefault();
+    if (!e.dataTransfer) return;
+    e.dataTransfer.dropEffect = 'move';
+    dropTarget = '__ungrouped';
+    dropPosition = 'inside';
+  }
+
+  function onUngroupedDragLeave() {
+    if (dropTarget === '__ungrouped') {
+      dropTarget = null;
+      dropPosition = 'after';
+    }
+  }
+
+  async function onUngroupedDrop(e: DragEvent) {
+    e.preventDefault();
+    if (!e.dataTransfer) return;
+    const raw = e.dataTransfer.getData('text/plain');
+    if (!raw) return;
+    try {
+      const data = JSON.parse(raw);
+      if (data.type === 'repo') {
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('move_repo_to_group', { repoId: data.id, groupId: null });
+        dispatch('dataChange');
+      }
+    } catch (err) {
+      console.error('Drop failed:', err);
+    }
+    onDragEnd();
+  }
+
+  function onRepoDragOver(e: DragEvent, repoId: string, _repoGroupId: string | null) {
+    e.preventDefault();
+    if (!e.dataTransfer) return;
+    e.dataTransfer.dropEffect = 'move';
+    dropTarget = repoId;
+    dropPosition = 'after';
+  }
+
+  async function onRepoDrop(e: DragEvent, targetRepoId: string, targetGroupId: string | null) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!e.dataTransfer) return;
+    const raw = e.dataTransfer.getData('text/plain');
+    if (!raw) return;
+    try {
+      const data = JSON.parse(raw);
+      if (data.type === 'repo' && data.id !== targetRepoId) {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const repoIds = repos
+          .filter(r => r.group_id === targetGroupId)
+          .sort((a, b) => a.order - b.order)
+          .map(r => r.id);
+        const fromIdx = repoIds.indexOf(data.id);
+        let toIdx = repoIds.indexOf(targetRepoId);
+        if (fromIdx !== -1 && toIdx !== -1) {
+          repoIds.splice(fromIdx, 1);
+          if (fromIdx < toIdx) toIdx--;
+          repoIds.splice(toIdx, 0, data.id);
+          await invoke('reorder_repos', { repoIds });
+          dispatch('dataChange');
+        } else if (fromIdx === -1) {
+          await invoke('move_repo_to_group', { repoId: data.id, groupId: targetGroupId });
+          const newRepoIds = repos
+            .filter(r => r.group_id === targetGroupId)
+            .sort((a, b) => a.order - b.order)
+            .map(r => r.id);
+          toIdx = newRepoIds.indexOf(targetRepoId);
+          if (toIdx !== -1) {
+            newRepoIds.splice(toIdx, 0, data.id);
+            await invoke('reorder_repos', { repoIds: newRepoIds });
+          }
+          dispatch('dataChange');
+        }
+      }
+    } catch (err) {
+      console.error('Drop failed:', err);
+    }
+    onDragEnd();
+  }
 </script>
 
 <aside class="sidebar">
@@ -124,10 +276,20 @@
 
   <div class="repo-tree">
     {#each getRootGroups() as group (group.id)}
-      <div class="group">
+      <div
+        class="group"
+        role="listitem"
+        class:drop-target={dropTarget === group.id && dropPosition === 'inside'}
+        ondragover={(e) => onGroupDragOver(e, group.id)}
+        ondragleave={onGroupDragLeave}
+        ondrop={(e) => onGroupDrop(e, group.id)}
+      >
         <button
           class="group-header"
+          draggable="true"
           onclick={() => toggleGroup(group.id)}
+          ondragstart={(e) => onGroupDragStart(e, group.id)}
+          ondragend={onDragEnd}
         >
           {#if expandedGroups.has(group.id)}
             <ChevronDown size={14} />
@@ -144,7 +306,10 @@
               <div class="subgroup">
                 <button
                   class="group-header sub"
+                  draggable="true"
                   onclick={() => toggleGroup(subGroup.id)}
+                  ondragstart={(e) => onGroupDragStart(e, subGroup.id)}
+                  ondragend={onDragEnd}
                 >
                   {#if expandedGroups.has(subGroup.id)}
                     <ChevronDown size={14} />
@@ -160,7 +325,14 @@
                       <button
                         class="repo-item"
                         class:selected={selectedRepo?.id === repo.id}
+                        class:drop-above={dropTarget === repo.id && dropPosition === 'before'}
+                        class:drop-below={dropTarget === repo.id && dropPosition === 'after'}
+                        draggable="true"
                         onclick={() => dispatch('select', repo)}
+                        ondragstart={(e) => onRepoDragStart(e, repo.id)}
+                        ondragend={onDragEnd}
+                        ondragover={(e) => onRepoDragOver(e, repo.id, subGroup.id)}
+                        ondrop={(e) => onRepoDrop(e, repo.id, subGroup.id)}
                       >
                         <span class="sync-dot {getSyncClass(repo)}"></span>
                         <span class="repo-name">{repo.name}</span>
@@ -175,7 +347,14 @@
               <button
                 class="repo-item"
                 class:selected={selectedRepo?.id === repo.id}
+                class:drop-above={dropTarget === repo.id && dropPosition === 'before'}
+                class:drop-below={dropTarget === repo.id && dropPosition === 'after'}
+                draggable="true"
                 onclick={() => dispatch('select', repo)}
+                ondragstart={(e) => onRepoDragStart(e, repo.id)}
+                ondragend={onDragEnd}
+                ondragover={(e) => onRepoDragOver(e, repo.id, group.id)}
+                ondrop={(e) => onRepoDrop(e, repo.id, group.id)}
               >
                 <span class="sync-dot {getSyncClass(repo)}"></span>
                 <span class="repo-name">{repo.name}</span>
@@ -187,12 +366,26 @@
     {/each}
 
     {#if filteredRepos(getReposInGroup(null)).length > 0}
-      <div class="ungrouped">
+      <div
+        class="ungrouped"
+        role="listitem"
+        class:drop-target={dropTarget === '__ungrouped'}
+        ondragover={onUngroupedDragOver}
+        ondragleave={onUngroupedDragLeave}
+        ondrop={onUngroupedDrop}
+      >
         {#each filteredRepos(getReposInGroup(null)) as repo (repo.id)}
           <button
             class="repo-item"
             class:selected={selectedRepo?.id === repo.id}
+            class:drop-above={dropTarget === repo.id && dropPosition === 'before'}
+            class:drop-below={dropTarget === repo.id && dropPosition === 'after'}
+            draggable="true"
             onclick={() => dispatch('select', repo)}
+            ondragstart={(e) => onRepoDragStart(e, repo.id)}
+            ondragend={onDragEnd}
+            ondragover={(e) => onRepoDragOver(e, repo.id, null)}
+            ondrop={(e) => onRepoDrop(e, repo.id, null)}
           >
             <span class="sync-dot {getSyncClass(repo)}"></span>
             <span class="repo-name">{repo.name}</span>
@@ -337,6 +530,13 @@
 
   .group {
     margin-bottom: 2px;
+    border-radius: 6px;
+    transition: background-color 0.15s;
+  }
+
+  .group.drop-target {
+    background-color: rgba(127, 90, 240, 0.1);
+    outline: 2px dashed var(--info);
   }
 
   .group-header {
@@ -351,6 +551,11 @@
     border-radius: 6px;
     font-weight: 500;
     font-size: 13px;
+    cursor: grab;
+  }
+
+  .group-header:active {
+    cursor: grabbing;
   }
 
   .group-header:hover {
@@ -390,6 +595,12 @@
     text-align: left;
     border-radius: 6px;
     font-size: 13px;
+    cursor: grab;
+    transition: background-color 0.1s;
+  }
+
+  .repo-item:active {
+    cursor: grabbing;
   }
 
   .repo-item:hover {
@@ -400,6 +611,28 @@
   .repo-item.selected {
     background-color: var(--accent);
     color: white;
+  }
+
+  .repo-item.drop-above {
+    box-shadow: inset 0 2px 0 0 var(--info);
+  }
+
+  .repo-item.drop-below {
+    box-shadow: inset 0 -2px 0 0 var(--info);
+  }
+
+  .ungrouped {
+    padding: 4px 0;
+    border-top: 1px dashed var(--border);
+    margin-top: 4px;
+    padding-top: 8px;
+    border-radius: 6px;
+    transition: background-color 0.15s;
+  }
+
+  .ungrouped.drop-target {
+    background-color: rgba(127, 90, 240, 0.1);
+    outline: 2px dashed var(--info);
   }
 
   .sync-dot {

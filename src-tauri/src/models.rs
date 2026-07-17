@@ -18,6 +18,7 @@ pub struct Repository {
     pub github_repo: Option<String>,
     pub default_branch: Option<String>,
     pub group_id: Option<String>,
+    pub order: u32,
     pub local_branches: Vec<String>,
     pub current_branch: String,
     pub sync_status: Option<SyncStatus>,

@@ -182,6 +182,36 @@ async fn move_repo_to_group(
 }
 
 #[tauri::command]
+async fn reorder_groups(
+    state: tauri::State<'_, AppState>,
+    group_ids: Vec<String>,
+) -> Result<(), String> {
+    let mut config = state.config.lock().await;
+    for (i, id) in group_ids.iter().enumerate() {
+        if let Some(group) = config.groups.iter_mut().find(|g| g.id == *id) {
+            group.order = i as u32;
+        }
+    }
+    config.save().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn reorder_repos(
+    state: tauri::State<'_, AppState>,
+    repo_ids: Vec<String>,
+) -> Result<(), String> {
+    let mut config = state.config.lock().await;
+    for (i, id) in repo_ids.iter().enumerate() {
+        if let Some(repo) = config.repos.iter_mut().find(|r| r.id == *id) {
+            repo.order = i as u32;
+        }
+    }
+    config.save().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 async fn get_all_prs(state: tauri::State<'_, AppState>) -> Result<Vec<PullRequest>, String> {
     let (repos_data, token) = {
         let config = state.config.lock().await;
@@ -432,6 +462,8 @@ pub fn run() {
             update_group,
             delete_group,
             move_repo_to_group,
+            reorder_groups,
+            reorder_repos,
             update_repo_default_branch,
             get_all_prs,
             sync_pr,

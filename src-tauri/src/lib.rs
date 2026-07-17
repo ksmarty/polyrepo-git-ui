@@ -52,10 +52,46 @@ async fn refresh_repo(
     let refreshed = git::refresh_repo(&repo_path).await?;
     let mut config = state.config.lock().await;
     if let Some(existing) = config.repos.iter_mut().find(|r| r.id == id) {
-        *existing = refreshed.clone();
+        existing.name = refreshed.name;
+        existing.remote_url = refreshed.remote_url;
+        existing.github_owner = refreshed.github_owner;
+        existing.github_repo = refreshed.github_repo;
+        existing.local_branches = refreshed.local_branches;
+        existing.current_branch = refreshed.current_branch;
+        existing.sync_status = refreshed.sync_status;
     }
     config.save().map_err(|e| e.to_string())?;
-    Ok(refreshed)
+    Ok(config.repos.iter().find(|r| r.id == id).cloned().ok_or("Repo not found".to_string())?)
+}
+
+#[tauri::command]
+async fn update_repo_default_branch(
+    state: tauri::State<'_, AppState>,
+    id: String,
+    default_branch: Option<String>,
+) -> Result<(), String> {
+    let mut config = state.config.lock().await;
+    if let Some(repo) = config.repos.iter_mut().find(|r| r.id == id) {
+        repo.default_branch = default_branch;
+    }
+    config.save().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn refresh_all_repos(state: tauri::State<'_, AppState>) -> Result<Vec<Repository>, String> {
+    let repo_ids: Vec<String> = {
+        let config = state.config.lock().await;
+        config.repos.iter().map(|r| r.id.clone()).collect()
+    };
+    let mut results = Vec::new();
+    for id in repo_ids {
+        match refresh_repo(state.clone(), id).await {
+            Ok(repo) => results.push(repo),
+            Err(e) => eprintln!("Failed to refresh repo: {}", e),
+        }
+    }
+    Ok(results)
 }
 
 #[tauri::command]
@@ -388,6 +424,7 @@ pub fn run() {
             add_repo,
             remove_repo,
             refresh_repo,
+            refresh_all_repos,
             fetch_repo,
             pull_repo,
             get_groups,
@@ -395,6 +432,7 @@ pub fn run() {
             update_group,
             delete_group,
             move_repo_to_group,
+            update_repo_default_branch,
             get_all_prs,
             sync_pr,
             get_config,

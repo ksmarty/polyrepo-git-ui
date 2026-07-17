@@ -186,7 +186,7 @@
       </div>
     {/each}
 
-    {#if getRootGroups().length === 0}
+    {#if filteredRepos(getReposInGroup(null)).length > 0}
       <div class="ungrouped">
         {#each filteredRepos(getReposInGroup(null)) as repo (repo.id)}
           <button

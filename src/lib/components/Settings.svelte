@@ -280,7 +280,10 @@
               <div class="item-actions">
                 <select
                   value={repo.group_id ?? ''}
-                  onchange={(e) => moveToGroup(repo.id, e.currentTarget.value || null)}
+                  onchange={(e) => {
+                    const val = (e.target as HTMLSelectElement).value;
+                    moveToGroup(repo.id, val || null);
+                  }}
                 >
                   <option value="">No folder</option>
                   {#each groups as group}

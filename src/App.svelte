@@ -3,7 +3,7 @@
   import PRList from './lib/components/PRList.svelte';
   import Settings from './lib/components/Settings.svelte';
   import type { Repository, RepoGroup } from './lib/types';
-  import { FolderGit2, GitPullRequest, Settings as SettingsIcon, RefreshCw, Download } from '@lucide/svelte';
+  import { FolderGit2, GitPullRequest, Settings as SettingsIcon, RefreshCw, Download, ExternalLink } from '@lucide/svelte';
 
   let activeTab: 'repos' | 'prs' | 'settings' = $state('repos');
   let repos: Repository[] = $state([]);
@@ -115,6 +115,30 @@
     editingDefaultBranch = true;
   }
 
+  function getGitHubUrl(repo: Repository): string | null {
+    if (repo.github_owner && repo.github_repo) {
+      return `https://github.com/${repo.github_owner}/${repo.github_repo}`;
+    }
+    if (repo.remote_url) {
+      return repo.remote_url
+        .replace('git@github.com:', 'https://github.com/')
+        .replace('.git', '');
+    }
+    return null;
+  }
+
+  async function openGitHub() {
+    if (!selectedRepo) return;
+    const url = getGitHubUrl(selectedRepo);
+    if (!url) return;
+    try {
+      const { open } = await import('@tauri-apps/plugin-shell');
+      await open(url);
+    } catch (e) {
+      console.error('Failed to open URL:', e);
+    }
+  }
+
   function handleThemeChange(event: CustomEvent<string>) {
     currentTheme = event.detail;
     applyTheme(currentTheme);
@@ -206,6 +230,15 @@
                   >
                     <Download size={14} />
                   </button>
+                  {#if getGitHubUrl(selectedRepo)}
+                    <button
+                      class="icon-btn"
+                      onclick={openGitHub}
+                      title="Open on GitHub"
+                    >
+                      <ExternalLink size={14} />
+                    </button>
+                  {/if}
                 </div>
               </div>
 

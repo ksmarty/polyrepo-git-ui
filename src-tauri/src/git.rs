@@ -223,47 +223,52 @@ async fn is_dirty(path: &Path) -> Result<bool, String> {
 }
 
 async fn get_behind_ahead(path: &Path, current_branch: &str) -> Result<(u32, u32), String> {
-    // First check if branch has an upstream tracking branch
+    // Build a list of refs to compare against, in priority order
+    let mut candidates: Vec<String> = Vec::new();
+
+    // 1. Try the branch's upstream tracking branch
     let upstream_output = Command::new("git")
         .args(["rev-parse", "--abbrev-ref", &format!("{}@{{upstream}}", current_branch)])
         .current_dir(path)
         .output()
         .await
-        .map_err(|e| format!("Failed to execute git rev-parse: {}", e))?;
+        .unwrap_or_else(|_| std::process::Output {
+            status: std::process::ExitStatus::default(),
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+        });
 
-    let upstream = if upstream_output.status.success() {
-        String::from_utf8_lossy(&upstream_output.stdout).trim().to_string()
-    } else {
-        // No upstream set — compare against the default branch (origin/main or origin/master)
-        let mb_output = Command::new("git")
-            .args(["rev-parse", "--verify", "refs/remotes/origin/main"])
+    if upstream_output.status.success() {
+        let upstream = String::from_utf8_lossy(&upstream_output.stdout).trim().to_string();
+        if !upstream.is_empty() {
+            candidates.push(upstream);
+        }
+    }
+
+    // 2. Try origin/main and origin/master
+    candidates.push("origin/main".to_string());
+    candidates.push("origin/master".to_string());
+
+    for upstream in &candidates {
+        let output = Command::new("git")
+            .args(["rev-list", "--left-right", "--count", &format!("{}...{}", upstream, current_branch)])
             .current_dir(path)
             .output()
             .await
-            .unwrap_or_else(|_| std::process::Output { status: std::process::ExitStatus::default(), stdout: Vec::new(), stderr: Vec::new() });
+            .unwrap_or_else(|_| std::process::Output {
+                status: std::process::ExitStatus::default(),
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+            });
 
-        let fallback = if mb_output.status.success() {
-            "origin/main".to_string()
-        } else {
-            "origin/master".to_string()
-        };
-        fallback
-    };
-
-    let output = Command::new("git")
-        .args(["rev-list", "--left-right", "--count", &format!("{}...{}", upstream, current_branch)])
-        .current_dir(path)
-        .output()
-        .await
-        .map_err(|e| format!("Failed to execute git rev-list: {}", e))?;
-
-    if output.status.success() {
-        let counts = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        let parts: Vec<&str> = counts.split('\t').collect();
-        if parts.len() == 2 {
-            let behind = parts[0].parse().unwrap_or(0);
-            let ahead = parts[1].parse().unwrap_or(0);
-            return Ok((behind, ahead));
+        if output.status.success() {
+            let counts = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let parts: Vec<&str> = counts.split('\t').collect();
+            if parts.len() == 2 {
+                let behind = parts[0].parse().unwrap_or(0);
+                let ahead = parts[1].parse().unwrap_or(0);
+                return Ok((behind, ahead));
+            }
         }
     }
 

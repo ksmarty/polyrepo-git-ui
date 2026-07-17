@@ -137,6 +137,172 @@ pub async fn pull_repo(path: &str, rebase: bool) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MergeConflict {
+    pub file: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MergeResult {
+    pub success: bool,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conflicts: Option<Vec<MergeConflict>>,
+}
+
+pub async fn merge_repo(path: &str, default_branch: Option<&str>) -> Result<MergeResult, String> {
+    // Try configured default branch first, then common fallbacks.
+    let mut targets: Vec<String> = Vec::new();
+    if let Some(branch) = default_branch {
+        if !branch.is_empty() {
+            targets.push(format!("origin/{}", branch));
+        }
+    }
+    targets.push("origin/main".to_string());
+    targets.push("origin/master".to_string());
+
+    let mut seen = std::collections::HashSet::new();
+    targets.retain(|t| seen.insert(t.clone()));
+
+    for target in &targets {
+        let output = Command::new("git")
+            .args(["merge", target])
+            .current_dir(path)
+            .output()
+            .await
+            .map_err(|e| format!("Failed to execute git merge: {}", e))?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            return Ok(MergeResult {
+                success: true,
+                message: if stdout.is_empty() { "Already up to date".to_string() } else { stdout },
+                conflicts: None,
+            });
+        }
+
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+        // If this target doesn't exist, try the next one.
+        if stderr.contains("not found") || stderr.contains("does not refer to a commit") {
+            continue;
+        }
+
+        // Check for merge conflicts.
+        if stderr.contains("CONFLICT") || stderr.contains("Automatic merge failed") {
+            let conflicts = get_merge_conflicts(path).await;
+            return Ok(MergeResult {
+                success: false,
+                message: stderr.trim().to_string(),
+                conflicts: Some(conflicts),
+            });
+        }
+
+        // Other error.
+        return Ok(MergeResult {
+            success: false,
+            message: stderr.trim().to_string(),
+            conflicts: None,
+        });
+    }
+
+    Err("No valid merge target found".to_string())
+}
+
+async fn get_merge_conflicts(path: &str) -> Vec<MergeConflict> {
+    let output = Command::new("git")
+        .args(["diff", "--name-only", "--diff-filter=U"])
+        .current_dir(path)
+        .output()
+        .await
+        .unwrap_or_else(|_| std::process::Output {
+            status: std::process::ExitStatus::default(),
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+        });
+
+    if !output.status.success() {
+        return Vec::new();
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout
+        .lines()
+        .filter(|l| !l.is_empty())
+        .map(|file| MergeConflict {
+            file: file.to_string(),
+            status: "both_modified".to_string(),
+        })
+        .collect()
+}
+
+pub async fn abort_merge(path: &str) -> Result<(), String> {
+    let output = Command::new("git")
+        .args(["merge", "--abort"])
+        .current_dir(path)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to execute git merge --abort: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Git merge --abort failed: {}", stderr));
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct GitLogEntry {
+    pub hash: String,
+    pub short_hash: String,
+    pub message: String,
+    pub author: String,
+    pub date: String,
+}
+
+pub async fn get_git_log(path: &str, limit: u32) -> Result<Vec<GitLogEntry>, String> {
+    let format = "%H\t%h\t%s\t%an\t%ar";
+    let output = Command::new("git")
+        .args([
+            "log",
+            &format!("--format={}", format),
+            &format!("-{}", limit),
+        ])
+        .current_dir(path)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to execute git log: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Git log failed: {}", stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let entries = stdout
+        .lines()
+        .filter(|line| !line.is_empty())
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.split('\t').collect();
+            if parts.len() >= 5 {
+                Some(GitLogEntry {
+                    hash: parts[0].to_string(),
+                    short_hash: parts[1].to_string(),
+                    message: parts[2].to_string(),
+                    author: parts[3].to_string(),
+                    date: parts[4].to_string(),
+                })
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    Ok(entries)
+}
+
 pub async fn clone_repo(
     url: &str,
     path: &str,

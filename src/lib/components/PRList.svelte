@@ -1,13 +1,8 @@
 <script lang="ts">
-  import type { Repository, PullRequest } from '../types';
+  import type { PullRequest } from '../types';
   import PRCard from './PRCard.svelte';
   import { RefreshCw, GitPullRequest } from '@lucide/svelte';
-
-  interface Props {
-    repos: Repository[];
-  }
-
-  let { repos }: Props = $props();
+  import { app } from '../stores.svelte';
 
   let prs: PullRequest[] = $state([]);
   let loading: boolean = $state(false);
@@ -50,7 +45,7 @@
   }
 
   function getRepoName(repoId: string): string {
-    const repo = repos.find(r => r.id === repoId);
+    const repo = app.repos.find(r => r.id === repoId);
     return repo?.name ?? 'Unknown';
   }
 
@@ -63,7 +58,7 @@
     <div class="filters">
       <select bind:value={filterRepo}>
         <option value="all">All Repos</option>
-        {#each repos as repo}
+        {#each app.repos as repo}
           <option value={repo.id}>{repo.name}</option>
         {/each}
       </select>

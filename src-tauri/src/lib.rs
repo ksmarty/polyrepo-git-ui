@@ -136,6 +136,63 @@ async fn pull_repo(
 }
 
 #[tauri::command]
+async fn merge_repo(
+    state: tauri::State<'_, AppState>,
+    id: String,
+) -> Result<git::MergeResult, String> {
+    let (repo_path, repo_default_branch, global_default_branch) = {
+        let config = state.config.lock().await;
+        let repo = config
+            .repos
+            .iter()
+            .find(|r| r.id == id)
+            .ok_or("Repo not found")?;
+        (
+            repo.path.clone(),
+            repo.default_branch.clone(),
+            config.app_config.default_branch.clone(),
+        )
+    };
+    let effective_default_branch = repo_default_branch.as_deref().or(Some(global_default_branch.as_str()));
+    git::merge_repo(&repo_path, effective_default_branch).await
+}
+
+#[tauri::command]
+async fn abort_merge(
+    state: tauri::State<'_, AppState>,
+    id: String,
+) -> Result<(), String> {
+    let repo_path = {
+        let config = state.config.lock().await;
+        config
+            .repos
+            .iter()
+            .find(|r| r.id == id)
+            .map(|r| r.path.clone())
+            .ok_or("Repo not found")?
+    };
+    git::abort_merge(&repo_path).await
+}
+
+#[tauri::command]
+async fn get_git_log(
+    state: tauri::State<'_, AppState>,
+    id: String,
+    limit: Option<u32>,
+) -> Result<Vec<git::GitLogEntry>, String> {
+    let repo_path = {
+        let config = state.config.lock().await;
+        config
+            .repos
+            .iter()
+            .find(|r| r.id == id)
+            .map(|r| r.path.clone())
+            .ok_or("Repo not found")?
+    };
+    git::get_git_log(&repo_path, limit.unwrap_or(20)).await
+}
+
+#[tauri::command]
 async fn get_groups(state: tauri::State<'_, AppState>) -> Result<Vec<RepoGroup>, String> {
     let config = state.config.lock().await;
     Ok(config.groups.clone())
@@ -470,6 +527,9 @@ pub fn run() {
             refresh_all_repos,
             fetch_repo,
             pull_repo,
+            merge_repo,
+            abort_merge,
+            get_git_log,
             get_groups,
             create_group,
             update_group,

@@ -1,28 +1,17 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
-  import type { Repository, RepoGroup } from '../types';
   import ImportModal from './ImportModal.svelte';
   import Sortable from 'sortablejs';
-  import { Search, Plus, FolderPlus, ChevronRight, ChevronDown, GitBranch, GripVertical } from '@lucide/svelte';
-
-  interface Props {
-    repos: Repository[];
-    groups: RepoGroup[];
-    selectedRepo: Repository | null;
-  }
-
-  let { repos, groups, selectedRepo }: Props = $props();
-
-  const dispatch = createEventDispatcher<{
-    select: Repository;
-    dataChange: void;
-  }>();
+  import { Search, Plus, FolderPlus, ChevronRight, ChevronDown, GitBranch } from '@lucide/svelte';
+  import { app } from '../stores.svelte';
+  import type { Repository, RepoGroup } from '../types';
 
   let expandedGroups: Set<string> = $state(new Set());
   let searchQuery: string = $state('');
   let showImportModal: boolean = $state(false);
   let showNewGroupInput: boolean = $state(false);
   let newGroupName: string = $state('');
+  let isDraggingRepo: boolean = $state(false);
+  let dragOverGroupId: string | null = $state(null);
 
   function toggleGroup(groupId: string) {
     const next = new Set(expandedGroups);
@@ -35,19 +24,19 @@
   }
 
   function getReposInGroup(groupId: string | null): Repository[] {
-    return repos
+    return app.repos
       .filter(r => r.group_id === groupId)
       .sort((a, b) => a.order - b.order);
   }
 
   function getSubGroups(parentId: string | null): RepoGroup[] {
-    return groups
+    return app.groups
       .filter(g => g.parent_id === parentId)
       .sort((a, b) => a.order - b.order);
   }
 
   function getRootGroups(): RepoGroup[] {
-    return groups
+    return app.groups
       .filter(g => g.parent_id === null)
       .sort((a, b) => a.order - b.order);
   }
@@ -75,23 +64,23 @@
       await invoke('create_group', { name: newGroupName.trim() });
       newGroupName = '';
       showNewGroupInput = false;
-      dispatch('dataChange');
+      await app.loadAll();
     } catch (e) {
       console.error('Failed to create group:', e);
     }
   }
 
   function handleRepoClick(repo: Repository) {
-    dispatch('select', repo);
+    app.selectRepo(repo);
   }
 
   function handleImportComplete() {
     showImportModal = false;
-    dispatch('dataChange');
+    app.loadAll();
   }
 
   function getRepoIdsInGroup(groupId: string | null): string[] {
-    return repos
+    return app.repos
       .filter(r => r.group_id === groupId)
       .sort((a, b) => a.order - b.order)
       .map(r => r.id);
@@ -108,7 +97,6 @@
     newIndex: number
   ) {
     if (fromGroupId === toGroupId) {
-      // Reorder within the same group.
       const ids = getRepoIdsInGroup(toGroupId);
       const oldIndex = ids.indexOf(repoId);
       if (oldIndex === -1) return;
@@ -125,48 +113,15 @@
       }
       const { invoke } = await import('@tauri-apps/api/core');
       await invoke('reorder_repos', { repoIds: ids });
-      dispatch('dataChange');
+      await app.loadAll();
     } else {
-      // Move to a different group then reorder.
       const targetIds = getRepoIdsInGroup(toGroupId);
       targetIds.splice(newIndex, 0, repoId);
       const { invoke } = await import('@tauri-apps/api/core');
       await invoke('move_repo_to_group', { repoId, groupId: toGroupId });
       await invoke('reorder_repos', { repoIds: targetIds });
-      dispatch('dataChange');
+      await app.loadAll();
     }
-  }
-
-  function sortableGroup(node: HTMLElement) {
-    const sortable = Sortable.create(node, {
-      group: { name: 'groups', pull: false, put: false },
-      animation: 150,
-      handle: '.group-handle',
-      draggable: '.group-wrapper',
-      ghostClass: 'sortable-ghost',
-      chosenClass: 'sortable-chosen',
-      dragClass: 'sortable-drag',
-      forceFallback: true,
-      fallbackClass: 'sortable-drag',
-      onEnd: async (evt) => {
-        if (evt.oldIndex == null || evt.newIndex == null) return;
-        const ids = getGroupSortIds();
-        const [moved] = ids.splice(evt.oldIndex, 1);
-        ids.splice(evt.newIndex, 0, moved);
-        try {
-          const { invoke } = await import('@tauri-apps/api/core');
-          await invoke('reorder_groups', { groupIds: ids });
-          dispatch('dataChange');
-        } catch (e) {
-          console.error('Failed to reorder groups:', e);
-        }
-      },
-    });
-    return {
-      destroy() {
-        sortable.destroy();
-      },
-    };
   }
 
   function containerToGroupId(el: HTMLElement): string | null {
@@ -175,43 +130,122 @@
     return groupId ?? null;
   }
 
-  function sortableRepos(node: HTMLElement, _groupId: string | null) {
-    const sortable = Sortable.create(node, {
-      group: { name: 'repos', pull: true, put: true },
+  function sortableGroup(node: HTMLElement) {
+    const opts: any = {
+      group: { name: 'groups', pull: false, put: false },
       animation: 150,
-      draggable: '.repo-item',
-      handle: '.repo-handle',
+      draggable: '.group-wrapper',
       ghostClass: 'sortable-ghost',
       chosenClass: 'sortable-chosen',
       dragClass: 'sortable-drag',
       forceFallback: true,
       fallbackClass: 'sortable-drag',
+      distance: 5,
+      onEnd: async (evt: any) => {
+        if (evt.oldIndex == null || evt.newIndex == null) return;
+        const ids = getGroupSortIds();
+        const [moved] = ids.splice(evt.oldIndex, 1);
+        ids.splice(evt.newIndex, 0, moved);
+        try {
+          const { invoke } = await import('@tauri-apps/api/core');
+          await invoke('reorder_groups', { groupIds: ids });
+          await app.loadAll();
+        } catch (e) {
+          console.error('Failed to reorder groups:', e);
+        }
+      },
+    };
+    const sortable = Sortable.create(node, opts);
+    return {
+      destroy() {
+        sortable.destroy();
+      },
+    };
+  }
+
+  function sortableRepos(node: HTMLElement, _groupId: string | null) {
+    const opts: any = {
+      group: { name: 'repos', pull: true, put: true },
+      animation: 150,
+      draggable: '.repo-item',
+      ghostClass: 'sortable-ghost',
+      chosenClass: 'sortable-chosen',
+      dragClass: 'sortable-drag',
+      forceFallback: true,
+      fallbackClass: 'sortable-drag',
+      distance: 3,
       delay: 0,
       delayOnTouchOnly: true,
-      onEnd: async (evt) => {
-        // Only handle the event on the sortable instance where the item was dropped.
-        if (evt.to !== node) return;
-
+      onStart() {
+        isDraggingRepo = true;
+      },
+      onEnd: async (evt: any) => {
         const repoId = evt.item.getAttribute('data-repo-id');
         if (!repoId || evt.oldIndex == null || evt.newIndex == null) return;
-
         const fromGroupId = containerToGroupId(evt.from);
         const toGroupId = containerToGroupId(evt.to);
-        // newIndex after Sortable already inserted the item into the target container.
         const newIndex = evt.newIndex;
-
         try {
           await moveRepoInSortable(repoId, fromGroupId, toGroupId, newIndex);
         } catch (e) {
           console.error('Failed to move repo:', e);
         }
       },
-    });
+      onMove(evt: any) {
+        dragOverGroupId = containerToGroupId(evt.to);
+      },
+    };
+    const sortable = Sortable.create(node, opts);
     return {
       destroy() {
         sortable.destroy();
+        isDraggingRepo = false;
+        dragOverGroupId = null;
       },
     };
+  }
+
+  function handleGroupDragOver(e: DragEvent, groupId: string) {
+    if (!isDraggingRepo) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    dragOverGroupId = groupId;
+  }
+
+  function handleGroupDragLeave(e: DragEvent, groupId: string) {
+    const related = e.relatedTarget as HTMLElement | null;
+    const target = e.currentTarget as HTMLElement;
+    if (!related || !target.contains(related)) {
+      if (dragOverGroupId === groupId) dragOverGroupId = null;
+    }
+  }
+
+  async function handleGroupDrop(e: DragEvent, groupId: string) {
+    e.preventDefault();
+    if (!e.dataTransfer) return;
+    dragOverGroupId = null;
+    const raw = e.dataTransfer.getData('text/plain');
+    if (!raw) return;
+    let data: { type: string; id: string };
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    if (data.type !== 'repo') return;
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('move_repo_to_group', { repoId: data.id, groupId });
+      await app.loadAll();
+    } catch (err) {
+      console.error('Drop failed:', err);
+    }
+  }
+
+  function onRepoDragStart(e: DragEvent, repoId: string) {
+    if (!e.dataTransfer) return;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'repo', id: repoId }));
   }
 </script>
 
@@ -262,23 +296,28 @@
   >
     {#each getRootGroups() as group (group.id)}
       <div class="group-wrapper" data-group-id={group.id}>
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
           class="group-header"
+          class:drop-target={dragOverGroupId === group.id && !expandedGroups.has(group.id)}
           data-group-id={group.id}
           role="treeitem"
           tabindex="0"
           aria-expanded={expandedGroups.has(group.id)}
           aria-selected="false"
+          onclick={() => toggleGroup(group.id)}
           onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroup(group.id); } }}
+          ondragover={(e) => handleGroupDragOver(e, group.id)}
+          ondragleave={(e) => handleGroupDragLeave(e, group.id)}
+          ondrop={(e) => handleGroupDrop(e, group.id)}
         >
-          <button class="toggle-btn" onclick={() => toggleGroup(group.id)}>
+          <span class="toggle-icon">
             {#if expandedGroups.has(group.id)}
               <ChevronDown size={14} />
             {:else}
               <ChevronRight size={14} />
             {/if}
-          </button>
-          <span class="group-handle" aria-label="Drag to reorder folder"><GripVertical size={10} /></span>
+          </span>
           <span class="group-name">{group.name}</span>
           <span class="repo-count">{getReposInGroup(group.id).length}</span>
         </div>
@@ -287,6 +326,7 @@
           <div class="group-content">
             {#each getSubGroups(group.id) as subGroup (subGroup.id)}
               <div class="subgroup">
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <div
                   class="group-header sub"
                   data-group-id={subGroup.id}
@@ -294,15 +334,19 @@
                   tabindex="0"
                   aria-expanded={expandedGroups.has(subGroup.id)}
                   aria-selected="false"
+                  onclick={() => toggleGroup(subGroup.id)}
                   onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroup(subGroup.id); } }}
+                  ondragover={(e) => handleGroupDragOver(e, subGroup.id)}
+                  ondragleave={(e) => handleGroupDragLeave(e, subGroup.id)}
+                  ondrop={(e) => handleGroupDrop(e, subGroup.id)}
                 >
-                  <button class="toggle-btn" onclick={() => toggleGroup(subGroup.id)}>
+                  <span class="toggle-icon">
                     {#if expandedGroups.has(subGroup.id)}
                       <ChevronDown size={14} />
                     {:else}
                       <ChevronRight size={14} />
                     {/if}
-                  </button>
+                  </span>
                   <span class="group-name">{subGroup.name}</span>
                 </div>
 
@@ -315,16 +359,17 @@
                     {#each filteredRepos(getReposInGroup(subGroup.id)) as repo (repo.id)}
                       <div
                         class="repo-item"
-                        class:selected={selectedRepo?.id === repo.id}
+                        class:selected={app.selectedRepo?.id === repo.id}
                         data-repo-id={repo.id}
                         data-group-id={subGroup.id}
                         role="treeitem"
                         tabindex="0"
-                        aria-selected={selectedRepo?.id === repo.id}
+                        aria-selected={app.selectedRepo?.id === repo.id}
+                        draggable="true"
+                        ondragstart={(e) => onRepoDragStart(e, repo.id)}
                         onclick={() => handleRepoClick(repo)}
                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleRepoClick(repo); } }}
                       >
-                        <span class="repo-handle"><GripVertical size={10} /></span>
                         <span class="sync-dot {getSyncClass(repo)}"></span>
                         <span class="repo-name">{repo.name}</span>
                       </div>
@@ -342,16 +387,17 @@
               {#each filteredRepos(getReposInGroup(group.id)) as repo (repo.id)}
                 <div
                   class="repo-item"
-                  class:selected={selectedRepo?.id === repo.id}
+                  class:selected={app.selectedRepo?.id === repo.id}
                   data-repo-id={repo.id}
                   data-group-id={group.id}
                   role="treeitem"
                   tabindex="0"
-                  aria-selected={selectedRepo?.id === repo.id}
+                  aria-selected={app.selectedRepo?.id === repo.id}
+                  draggable="true"
+                  ondragstart={(e) => onRepoDragStart(e, repo.id)}
                   onclick={() => handleRepoClick(repo)}
                   onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleRepoClick(repo); } }}
                 >
-                  <span class="repo-handle"><GripVertical size={10} /></span>
                   <span class="sync-dot {getSyncClass(repo)}"></span>
                   <span class="repo-name">{repo.name}</span>
                 </div>
@@ -371,23 +417,24 @@
       {#each filteredRepos(getReposInGroup(null)) as repo (repo.id)}
         <div
           class="repo-item"
-          class:selected={selectedRepo?.id === repo.id}
+          class:selected={app.selectedRepo?.id === repo.id}
           data-repo-id={repo.id}
           data-group-id={null}
           role="treeitem"
           tabindex="0"
-          aria-selected={selectedRepo?.id === repo.id}
+          aria-selected={app.selectedRepo?.id === repo.id}
+          draggable="true"
+          ondragstart={(e) => onRepoDragStart(e, repo.id)}
           onclick={() => handleRepoClick(repo)}
           onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleRepoClick(repo); } }}
         >
-          <span class="repo-handle"><GripVertical size={10} /></span>
           <span class="sync-dot {getSyncClass(repo)}"></span>
           <span class="repo-name">{repo.name}</span>
         </div>
       {/each}
     </div>
 
-    {#if repos.length === 0}
+    {#if app.repos.length === 0}
       <div class="empty-state">
         <GitBranch size={32} />
         <p>No repos added yet</p>
@@ -546,15 +593,16 @@
   .group-header {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     width: 100%;
-    padding: 4px 4px;
+    padding: 6px 8px;
     border-radius: 6px;
     font-weight: 500;
     font-size: 13px;
     color: var(--text-secondary);
     cursor: pointer;
     transition: background-color 0.15s;
+    user-select: none;
   }
 
   .group-header:hover {
@@ -562,43 +610,24 @@
     color: var(--text-primary);
   }
 
+  .group-header.drop-target {
+    background-color: rgba(127, 90, 240, 0.15);
+    outline: 2px dashed var(--info);
+    outline-offset: -2px;
+  }
+
   .group-header.sub {
-    padding-left: 20px;
+    padding-left: 24px;
   }
 
-  .group-handle {
+  .toggle-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--text-secondary);
-    opacity: 0.5;
-    cursor: grab;
-    padding: 0 2px;
-    user-select: none;
-  }
-
-  .group-handle:hover {
-    opacity: 0.9;
-    color: var(--text-primary);
-  }
-
-  .group-handle:active {
-    cursor: grabbing;
-  }
-
-  .toggle-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 20px;
-    height: 20px;
-    background: transparent;
+    width: 16px;
+    height: 16px;
     color: var(--text-secondary);
     flex-shrink: 0;
-  }
-
-  .toggle-btn:hover {
-    color: var(--text-primary);
   }
 
   .group-name {
@@ -625,7 +654,7 @@
   .repo-item {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     width: 100%;
     padding: 5px 8px;
     background: transparent;
@@ -633,7 +662,7 @@
     text-align: left;
     border-radius: 6px;
     font-size: 13px;
-    cursor: pointer;
+    cursor: grab;
     transition: background-color 0.1s;
     border: 2px solid transparent;
   }
@@ -646,25 +675,6 @@
   .repo-item.selected {
     background-color: var(--accent);
     color: white;
-  }
-
-  .repo-handle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-secondary);
-    opacity: 0.4;
-    cursor: grab;
-    padding: 0 2px;
-    user-select: none;
-  }
-
-  .repo-item:hover .repo-handle {
-    opacity: 0.8;
-  }
-
-  .repo-handle:active {
-    cursor: grabbing;
   }
 
   .ungrouped {

@@ -196,6 +196,10 @@ user = "username"
 - `.github/workflows/build.yml`: Build matrix (macOS, Windows), triggered on push/PR
 - `.github/workflows/release.yml`: Build + create GitHub release on tag push
 
+## Workflow Notes
+
+- Always commit changes once they're complete — don't leave uncommitted work after finishing a task.
+
 ## Pitfalls
 
 - `vite.config.ts` must use `import { svelte } from '@sveltejs/vite-plugin-svelte'` — NOT `sveltekit()`

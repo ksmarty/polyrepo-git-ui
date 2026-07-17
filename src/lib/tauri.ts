@@ -1,6 +1,25 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { Repository, RepoGroup, PullRequest, AppConfig } from './types';
 
+export interface GitLogEntry {
+  hash: string;
+  short_hash: string;
+  message: string;
+  author: string;
+  date: string;
+}
+
+export interface MergeResult {
+  success: boolean;
+  message: string;
+  conflicts?: MergeConflict[];
+}
+
+export interface MergeConflict {
+  file: string;
+  status: 'both_modified' | 'both_added' | 'deleted_by_them' | 'deleted_by_us' | 'added_by_them' | 'added_by_us';
+}
+
 export async function getRepos(): Promise<Repository[]> {
   return invoke('get_repos');
 }
@@ -25,6 +44,14 @@ export async function pullRepo(id: string, rebase: boolean): Promise<void> {
   return invoke('pull_repo', { id, rebase });
 }
 
+export async function mergeRepo(id: string): Promise<MergeResult> {
+  return invoke('merge_repo', { id });
+}
+
+export async function getGitLog(id: string, limit?: number): Promise<GitLogEntry[]> {
+  return invoke('get_git_log', { id, limit });
+}
+
 export async function getGroups(): Promise<RepoGroup[]> {
   return invoke('get_groups');
 }
@@ -43,6 +70,14 @@ export async function deleteGroup(id: string): Promise<void> {
 
 export async function moveRepoToGroup(repoId: string, groupId: string | null): Promise<void> {
   return invoke('move_repo_to_group', { repoId, groupId });
+}
+
+export async function reorderRepos(repoIds: string[]): Promise<void> {
+  return invoke('reorder_repos', { repoIds });
+}
+
+export async function reorderGroups(groupIds: string[]): Promise<void> {
+  return invoke('reorder_groups', { groupIds });
 }
 
 export async function getAllPRs(): Promise<PullRequest[]> {

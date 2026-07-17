@@ -90,40 +90,6 @@
     return getRootGroups().map(g => g.id);
   }
 
-  async function moveRepoInSortable(
-    repoId: string,
-    fromGroupId: string | null,
-    toGroupId: string | null,
-    newIndex: number
-  ) {
-    if (fromGroupId === toGroupId) {
-      const ids = getRepoIdsInGroup(toGroupId);
-      const oldIndex = ids.indexOf(repoId);
-      if (oldIndex === -1) return;
-      ids.splice(oldIndex, 1);
-      ids.splice(newIndex, 0, repoId);
-      if (
-        ids.every(
-          (id, idx) =>
-            id ===
-            getRepoIdsInGroup(toGroupId)[idx]
-        )
-      ) {
-        return;
-      }
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('reorder_repos', { repoIds: ids });
-      await app.loadAll();
-    } else {
-      const targetIds = getRepoIdsInGroup(toGroupId);
-      targetIds.splice(newIndex, 0, repoId);
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('move_repo_to_group', { repoId, groupId: toGroupId });
-      await invoke('reorder_repos', { repoIds: targetIds });
-      await app.loadAll();
-    }
-  }
-
   function containerToGroupId(el: HTMLElement): string | null {
     if (el.hasAttribute('data-ungrouped')) return null;
     const groupId = el.getAttribute('data-group-id');
@@ -184,11 +150,39 @@
         if (!repoId || evt.oldIndex == null || evt.newIndex == null) return;
         const fromGroupId = containerToGroupId(evt.from);
         const toGroupId = containerToGroupId(evt.to);
-        const newIndex = evt.newIndex;
+
+        // Cross-container move: revert SortableJS's DOM change so Svelte handles rendering.
+        if (evt.from !== evt.to) {
+          evt.from.appendChild(evt.item);
+        }
+
+        // Optimistically update state so Svelte re-renders immediately.
+        if (fromGroupId !== toGroupId) {
+          app.repos = app.repos.map(r =>
+            r.id === repoId ? { ...r, group_id: toGroupId } : r
+          );
+        }
+
         try {
-          await moveRepoInSortable(repoId, fromGroupId, toGroupId, newIndex);
+          const { invoke } = await import('@tauri-apps/api/core');
+          if (fromGroupId === toGroupId) {
+            const ids = getRepoIdsInGroup(toGroupId);
+            const oldIndex = ids.indexOf(repoId);
+            if (oldIndex === -1) return;
+            ids.splice(oldIndex, 1);
+            ids.splice(evt.newIndex, 0, repoId);
+            if (ids.every((id, idx) => id === getRepoIdsInGroup(toGroupId)[idx])) return;
+            await invoke('reorder_repos', { repoIds: ids });
+          } else {
+            await invoke('move_repo_to_group', { repoId, groupId: toGroupId });
+            const targetIds = getRepoIdsInGroup(toGroupId);
+            targetIds.splice(evt.newIndex, 0, repoId);
+            await invoke('reorder_repos', { repoIds: targetIds });
+          }
+          await app.loadAll();
         } catch (e) {
           console.error('Failed to move repo:', e);
+          await app.loadAll();
         }
       },
       onMove(evt: any) {
@@ -201,6 +195,42 @@
         sortable.destroy();
         isDraggingRepo = false;
         dragOverGroupId = null;
+      },
+    };
+  }
+
+  function collapsedFolderSortable(node: HTMLElement, groupId: string) {
+    const opts: any = {
+      group: { name: 'repos', pull: false, put: true },
+      animation: 150,
+      draggable: '.repo-item',
+      ghostClass: 'sortable-ghost',
+      chosenClass: 'sortable-chosen',
+      dragClass: 'sortable-drag',
+      forceFallback: true,
+      fallbackClass: 'sortable-drag',
+      onAdd: async (evt: any) => {
+        const repoId = evt.item.getAttribute('data-repo-id');
+        if (!repoId) return;
+        // Revert DOM change; let Svelte handle rendering.
+        evt.from.appendChild(evt.item);
+        app.repos = app.repos.map(r =>
+          r.id === repoId ? { ...r, group_id: groupId } : r
+        );
+        try {
+          const { invoke } = await import('@tauri-apps/api/core');
+          await invoke('move_repo_to_group', { repoId, groupId });
+          await app.loadAll();
+        } catch (e) {
+          console.error('Failed to move repo to folder:', e);
+          await app.loadAll();
+        }
+      },
+    };
+    const sortable = Sortable.create(node, opts);
+    return {
+      destroy() {
+        sortable.destroy();
       },
     };
   }
@@ -322,6 +352,14 @@
           <span class="repo-count">{getReposInGroup(group.id).length}</span>
         </div>
 
+        {#if !expandedGroups.has(group.id)}
+          <div
+            class="collapsed-drop-target"
+            data-group-id={group.id}
+            use:collapsedFolderSortable={group.id}
+          ></div>
+        {/if}
+
         {#if expandedGroups.has(group.id)}
           <div class="group-content">
             {#each getSubGroups(group.id) as subGroup (subGroup.id)}
@@ -349,6 +387,14 @@
                   </span>
                   <span class="group-name">{subGroup.name}</span>
                 </div>
+
+                {#if !expandedGroups.has(subGroup.id)}
+                  <div
+                    class="collapsed-drop-target sub"
+                    data-group-id={subGroup.id}
+                    use:collapsedFolderSortable={subGroup.id}
+                  ></div>
+                {/if}
 
                 {#if expandedGroups.has(subGroup.id)}
                   <div
@@ -645,6 +691,23 @@
 
   .group-content {
     padding-left: 12px;
+  }
+
+  .collapsed-drop-target {
+    min-height: 4px;
+    margin: 0 4px;
+    border-radius: 4px;
+    transition: background-color 0.15s, min-height 0.15s;
+  }
+
+  .collapsed-drop-target.sub {
+    margin-left: 24px;
+  }
+
+  :global(.collapsed-drop-target.sortable-ghost) {
+    min-height: 28px;
+    background-color: rgba(127, 90, 240, 0.1);
+    border: 2px dashed var(--info);
   }
 
   .repo-list {

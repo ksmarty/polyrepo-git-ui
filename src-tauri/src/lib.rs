@@ -20,7 +20,11 @@ async fn add_repo(
     path: String,
     group_id: Option<String>,
 ) -> Result<Repository, String> {
-    let repo = git::add_repo(&path, group_id.as_deref()).await?;
+    let default_branch = {
+        let config = state.config.lock().await;
+        config.app_config.default_branch.clone()
+    };
+    let repo = git::add_repo(&path, group_id.as_deref(), Some(&default_branch)).await?;
     let mut config = state.config.lock().await;
     config.repos.push(repo.clone());
     config.save().map_err(|e| e.to_string())?;
@@ -40,16 +44,21 @@ async fn refresh_repo(
     state: tauri::State<'_, AppState>,
     id: String,
 ) -> Result<Repository, String> {
-    let repo_path = {
+    let (repo_path, repo_default_branch, global_default_branch) = {
         let config = state.config.lock().await;
-        config
+        let repo = config
             .repos
             .iter()
             .find(|r| r.id == id)
-            .map(|r| r.path.clone())
-            .ok_or("Repo not found")?
+            .ok_or("Repo not found")?;
+        (
+            repo.path.clone(),
+            repo.default_branch.clone(),
+            config.app_config.default_branch.clone(),
+        )
     };
-    let refreshed = git::refresh_repo(&repo_path).await?;
+    let effective_default_branch = repo_default_branch.as_deref().or(Some(global_default_branch.as_str()));
+    let refreshed = git::refresh_repo(&repo_path, effective_default_branch).await?;
     let mut config = state.config.lock().await;
     if let Some(existing) = config.repos.iter_mut().find(|r| r.id == id) {
         existing.name = refreshed.name;
@@ -278,11 +287,15 @@ async fn update_config(
 
 #[tauri::command]
 async fn clone_repo(
-    _state: tauri::State<'_, AppState>,
+    state: tauri::State<'_, AppState>,
     url: String,
     path: String,
 ) -> Result<Repository, String> {
-    git::clone_repo(&url, &path).await
+    let default_branch = {
+        let config = state.config.lock().await;
+        config.app_config.default_branch.clone()
+    };
+    git::clone_repo(&url, &path, Some(&default_branch)).await
 }
 
 #[tauri::command]

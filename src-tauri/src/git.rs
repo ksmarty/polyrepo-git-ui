@@ -14,7 +14,11 @@ pub async fn check_git_installed() -> Result<bool, String> {
     Ok(output.status.success())
 }
 
-pub async fn add_repo(path: &str, group_id: Option<&str>) -> Result<Repository, String> {
+pub async fn add_repo(
+    path: &str,
+    group_id: Option<&str>,
+    default_branch: Option<&str>,
+) -> Result<Repository, String> {
     let path = Path::new(path);
     if !path.exists() {
         return Err("Path does not exist".to_string());
@@ -37,7 +41,7 @@ pub async fn add_repo(path: &str, group_id: Option<&str>) -> Result<Repository, 
 
     let current_branch = get_current_branch(path).await?;
     let local_branches = get_local_branches(path).await?;
-    let sync_status = get_sync_status(path, &current_branch).await?;
+    let sync_status = get_sync_status(path, &current_branch, default_branch).await?;
 
     Ok(Repository {
         id: uuid::Uuid::new_v4().to_string(),
@@ -55,7 +59,10 @@ pub async fn add_repo(path: &str, group_id: Option<&str>) -> Result<Repository, 
     })
 }
 
-pub async fn refresh_repo(path: &str) -> Result<Repository, String> {
+pub async fn refresh_repo(
+    path: &str,
+    default_branch: Option<&str>,
+) -> Result<Repository, String> {
     let path = Path::new(path);
     if !path.exists() {
         return Err("Path does not exist".to_string());
@@ -74,7 +81,7 @@ pub async fn refresh_repo(path: &str) -> Result<Repository, String> {
 
     let current_branch = get_current_branch(path).await?;
     let local_branches = get_local_branches(path).await?;
-    let sync_status = get_sync_status(path, &current_branch).await?;
+    let sync_status = get_sync_status(path, &current_branch, default_branch).await?;
 
     Ok(Repository {
         id: uuid::Uuid::new_v4().to_string(),
@@ -130,7 +137,11 @@ pub async fn pull_repo(path: &str, rebase: bool) -> Result<(), String> {
     Ok(())
 }
 
-pub async fn clone_repo(url: &str, path: &str) -> Result<Repository, String> {
+pub async fn clone_repo(
+    url: &str,
+    path: &str,
+    default_branch: Option<&str>,
+) -> Result<Repository, String> {
     let output = Command::new("git")
         .arg("clone")
         .arg(url)
@@ -144,7 +155,7 @@ pub async fn clone_repo(url: &str, path: &str) -> Result<Repository, String> {
         return Err(format!("Git clone failed: {}", stderr));
     }
 
-    add_repo(path, None).await
+    add_repo(path, None, default_branch).await
 }
 
 async fn get_remote_url(path: &Path) -> Result<Option<String>, String> {
@@ -199,9 +210,13 @@ async fn get_local_branches(path: &Path) -> Result<Vec<String>, String> {
     }
 }
 
-async fn get_sync_status(path: &Path, current_branch: &str) -> Result<SyncStatus, String> {
+async fn get_sync_status(
+    path: &Path,
+    current_branch: &str,
+    default_branch: Option<&str>,
+) -> Result<SyncStatus, String> {
     let dirty = is_dirty(path).await?;
-    let (behind, ahead) = get_behind_ahead(path, current_branch).await?;
+    let (behind, ahead) = get_behind_ahead(path, current_branch, default_branch).await?;
 
     Ok(SyncStatus {
         behind,
@@ -222,11 +237,27 @@ async fn is_dirty(path: &Path) -> Result<bool, String> {
     Ok(!output.stdout.is_empty())
 }
 
-async fn get_behind_ahead(path: &Path, current_branch: &str) -> Result<(u32, u32), String> {
-    // Build a list of refs to compare against, in priority order
+async fn get_behind_ahead(
+    path: &Path,
+    current_branch: &str,
+    default_branch: Option<&str>,
+) -> Result<(u32, u32), String> {
+    // Use HEAD for the local side when the branch name is unavailable (detached HEAD).
+    let local_ref = if current_branch.is_empty() { "HEAD" } else { current_branch };
+
+    // Build a list of refs to compare against, in priority order.
+    // The "base branch" the user configured is the most important comparison.
     let mut candidates: Vec<String> = Vec::new();
 
-    // 1. Try the branch's upstream tracking branch
+    // 1. Configured default branch (per-repo override or global setting).
+    if let Some(branch) = default_branch {
+        if !branch.is_empty() {
+            candidates.push(format!("origin/{}", branch));
+            candidates.push(format!("upstream/{}", branch));
+        }
+    }
+
+    // 2. The branch's upstream tracking branch.
     let upstream_output = Command::new("git")
         .args(["rev-parse", "--abbrev-ref", &format!("{}@{{upstream}}", current_branch)])
         .current_dir(path)
@@ -245,13 +276,19 @@ async fn get_behind_ahead(path: &Path, current_branch: &str) -> Result<(u32, u32
         }
     }
 
-    // 2. Try origin/main and origin/master
+    // 3. Common fallback base branches on common remotes.
     candidates.push("origin/main".to_string());
+    candidates.push("upstream/main".to_string());
     candidates.push("origin/master".to_string());
+    candidates.push("upstream/master".to_string());
+
+    // Deduplicate while preserving priority.
+    let mut seen = std::collections::HashSet::new();
+    candidates.retain(|c| seen.insert(c.clone()));
 
     for upstream in &candidates {
         let output = Command::new("git")
-            .args(["rev-list", "--left-right", "--count", &format!("{}...{}", upstream, current_branch)])
+            .args(["rev-list", "--left-right", "--count", &format!("{}...{}", upstream, local_ref)])
             .current_dir(path)
             .output()
             .await
@@ -272,6 +309,7 @@ async fn get_behind_ahead(path: &Path, current_branch: &str) -> Result<(u32, u32
         }
     }
 
+    // Could not compare against any ref. Default to in-sync so the UI doesn't block.
     Ok((0, 0))
 }
 
@@ -332,7 +370,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_add_repo_nonexistent_path() {
-        let result = add_repo("/nonexistent/path/to/repo", None).await;
+        let result = add_repo("/nonexistent/path/to/repo", None, None).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("does not exist"));
     }
@@ -343,7 +381,7 @@ mod tests {
         let repo_path = temp_dir.path().join("not-a-repo");
         fs::create_dir_all(&repo_path).unwrap();
 
-        let result = add_repo(repo_path.to_str().unwrap(), None).await;
+        let result = add_repo(repo_path.to_str().unwrap(), None, None).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Not a git repository"));
     }
@@ -354,7 +392,7 @@ mod tests {
         let repo_path = temp_dir.path().join("my-repo");
         create_test_working_repo(&repo_path);
 
-        let result = add_repo(repo_path.to_str().unwrap(), None).await;
+        let result = add_repo(repo_path.to_str().unwrap(), None, None).await;
         assert!(result.is_ok());
 
         let repo = result.unwrap();
@@ -369,14 +407,14 @@ mod tests {
         let repo_path = temp_dir.path().join("grouped-repo");
         create_test_working_repo(&repo_path);
 
-        let result = add_repo(repo_path.to_str().unwrap(), Some("group-123")).await;
+        let result = add_repo(repo_path.to_str().unwrap(), Some("group-123"), None).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().group_id, Some("group-123".to_string()));
     }
 
     #[tokio::test]
     async fn test_refresh_repo_nonexistent() {
-        let result = refresh_repo("/nonexistent/path").await;
+        let result = refresh_repo("/nonexistent/path", None).await;
         assert!(result.is_err());
     }
 
@@ -386,8 +424,91 @@ mod tests {
         let repo_path = temp_dir.path().join("refresh-repo");
         create_test_working_repo(&repo_path);
 
-        let result = refresh_repo(repo_path.to_str().unwrap()).await;
+        let result = refresh_repo(repo_path.to_str().unwrap(), None).await;
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_get_behind_ahead_uses_default_branch() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let remote_path = temp_dir.path().join("remote.git");
+        let local_path = temp_dir.path().join("local");
+
+        // Create a bare remote repo.
+        create_test_working_repo(&remote_path);
+        std::process::Command::new("git")
+            .args(["config", "--bool", "core.bare", "true"])
+            .current_dir(&remote_path)
+            .output()
+            .unwrap();
+
+        // Clone the remote and name the default branch "develop".
+        std::process::Command::new("git")
+            .args([
+                "clone",
+                "--branch",
+                "main",
+                remote_path.to_str().unwrap(),
+                local_path.to_str().unwrap(),
+            ])
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["branch", "-m", "develop"])
+            .current_dir(&local_path)
+            .output()
+            .unwrap();
+
+        // Add two commits to the remote's "develop" equivalent (remote HEAD).
+        let remote_worktree = temp_dir.path().join("remote-work");
+        std::process::Command::new("git")
+            .args(["clone", remote_path.to_str().unwrap(), remote_worktree.to_str().unwrap()])
+            .output()
+            .unwrap();
+        fs::write(remote_worktree.join("a.md"), "a").unwrap();
+        std::process::Command::new("git")
+            .args(["add", "."])
+            .current_dir(&remote_worktree)
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["commit", "-m", "commit-1"])
+            .current_dir(&remote_worktree)
+            .output()
+            .unwrap();
+        fs::write(remote_worktree.join("b.md"), "b").unwrap();
+        std::process::Command::new("git")
+            .args(["add", "."])
+            .current_dir(&remote_worktree)
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["commit", "-m", "commit-2"])
+            .current_dir(&remote_worktree)
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["push", "origin", "main"])
+            .current_dir(&remote_worktree)
+            .output()
+            .unwrap();
+
+        // Fetch in the local repo so origin/main exists but no upstream is set.
+        std::process::Command::new("git")
+            .args(["fetch", "origin"])
+            .current_dir(&local_path)
+            .output()
+            .unwrap();
+
+        let (behind, ahead) = get_behind_ahead(
+            &local_path,
+            "develop",
+            Some("main"), // configured default branch is "main" (remote has origin/main)
+        )
+        .await
+        .unwrap();
+        assert_eq!(behind, 2, "expected 2 commits behind origin/main");
+        assert_eq!(ahead, 0);
     }
 
     #[tokio::test]

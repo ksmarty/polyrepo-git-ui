@@ -1,7 +1,7 @@
 <script lang="ts">
   import ImportModal from './ImportModal.svelte';
   import Sortable from 'sortablejs';
-  import { Search, Plus, FolderPlus, ChevronRight, ChevronDown, GitBranch } from '@lucide/svelte';
+  import { Search, Plus, FolderPlus, ChevronRight, ChevronDown, GitBranch, Filter } from '@lucide/svelte';
   import { app } from '../stores.svelte';
   import type { Repository, RepoGroup } from '../types';
 
@@ -12,6 +12,7 @@
   let newGroupName: string = $state('');
   let isDraggingRepo: boolean = $state(false);
   let dragOverGroupId: string | null = $state(null);
+  let filterStale: boolean = $state(false);
 
   function toggleGroup(groupId: string) {
     const next = new Set(expandedGroups);
@@ -24,9 +25,17 @@
   }
 
   function getReposInGroup(groupId: string | null): Repository[] {
-    return app.repos
+    let list = app.repos
       .filter(r => r.group_id === groupId)
       .sort((a, b) => a.order - b.order);
+    if (filterStale) {
+      list = list.filter(r => r.sync_status && (r.sync_status.behind > 0 || r.sync_status.is_dirty));
+    }
+    return list;
+  }
+
+  function isGroupEmpty(groupId: string): boolean {
+    return getReposInGroup(groupId).length === 0 && getSubGroups(groupId).length === 0;
   }
 
   function getSubGroups(parentId: string | null): RepoGroup[] {
@@ -106,7 +115,7 @@
       dragClass: 'sortable-drag',
       forceFallback: true,
       fallbackClass: 'sortable-drag',
-      distance: 5,
+      distance: 8,
       onEnd: async (evt: any) => {
         if (evt.oldIndex == null || evt.newIndex == null) return;
         const ids = getGroupSortIds();
@@ -291,13 +300,20 @@
       />
     </div>
     <div class="header-actions">
+      <button
+        class="action-btn"
+        class:active={filterStale}
+        onclick={() => filterStale = !filterStale}
+        title="Show only out-of-date repos"
+      >
+        <Filter size={14} />
+      </button>
       <button class="action-btn" onclick={() => showImportModal = true} title="Import repos">
         <Plus size={16} />
         <span>Import</span>
       </button>
       <button class="action-btn" onclick={() => showNewGroupInput = true} title="New folder">
         <FolderPlus size={16} />
-        <span>Folder</span>
       </button>
     </div>
   </div>
@@ -325,29 +341,33 @@
     use:sortableGroup
   >
     {#each getRootGroups() as group (group.id)}
+      {@const empty = isGroupEmpty(group.id)}
       <div class="group-wrapper" data-group-id={group.id}>
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
           class="group-header"
+          class:empty-folder={empty}
           class:drop-target={dragOverGroupId === group.id && !expandedGroups.has(group.id)}
           data-group-id={group.id}
           role="treeitem"
           tabindex="0"
           aria-expanded={expandedGroups.has(group.id)}
           aria-selected="false"
-          onclick={() => toggleGroup(group.id)}
-          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroup(group.id); } }}
+          onclick={() => { if (!empty) toggleGroup(group.id); }}
+          onkeydown={(e) => { if (!empty && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleGroup(group.id); } }}
           ondragover={(e) => handleGroupDragOver(e, group.id)}
           ondragleave={(e) => handleGroupDragLeave(e, group.id)}
           ondrop={(e) => handleGroupDrop(e, group.id)}
         >
-          <span class="toggle-icon">
-            {#if expandedGroups.has(group.id)}
-              <ChevronDown size={14} />
-            {:else}
-              <ChevronRight size={14} />
-            {/if}
-          </span>
+          {#if !empty}
+            <span class="toggle-icon">
+              {#if expandedGroups.has(group.id)}
+                <ChevronDown size={14} />
+              {:else}
+                <ChevronRight size={14} />
+              {/if}
+            </span>
+          {/if}
           <span class="group-name">{group.name}</span>
           <span class="repo-count">{getReposInGroup(group.id).length}</span>
         </div>
@@ -363,28 +383,32 @@
         {#if expandedGroups.has(group.id)}
           <div class="group-content">
             {#each getSubGroups(group.id) as subGroup (subGroup.id)}
+              {@const subEmpty = isGroupEmpty(subGroup.id)}
               <div class="subgroup">
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <div
                   class="group-header sub"
+                  class:empty-folder={subEmpty}
                   data-group-id={subGroup.id}
                   role="treeitem"
                   tabindex="0"
                   aria-expanded={expandedGroups.has(subGroup.id)}
                   aria-selected="false"
-                  onclick={() => toggleGroup(subGroup.id)}
-                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroup(subGroup.id); } }}
+                  onclick={() => { if (!subEmpty) toggleGroup(subGroup.id); }}
+                  onkeydown={(e) => { if (!subEmpty && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleGroup(subGroup.id); } }}
                   ondragover={(e) => handleGroupDragOver(e, subGroup.id)}
                   ondragleave={(e) => handleGroupDragLeave(e, subGroup.id)}
                   ondrop={(e) => handleGroupDrop(e, subGroup.id)}
                 >
-                  <span class="toggle-icon">
-                    {#if expandedGroups.has(subGroup.id)}
-                      <ChevronDown size={14} />
-                    {:else}
-                      <ChevronRight size={14} />
-                    {/if}
-                  </span>
+                  {#if !subEmpty}
+                    <span class="toggle-icon">
+                      {#if expandedGroups.has(subGroup.id)}
+                        <ChevronDown size={14} />
+                      {:else}
+                        <ChevronRight size={14} />
+                      {/if}
+                    </span>
+                  {/if}
                   <span class="group-name">{subGroup.name}</span>
                 </div>
 
@@ -459,7 +483,6 @@
       data-ungrouped="true"
       use:sortableRepos={null}
     >
-      <span class="ungrouped-label">Ungrouped</span>
       {#each filteredRepos(getReposInGroup(null)) as repo (repo.id)}
         <div
           class="repo-item"
@@ -586,6 +609,11 @@
     color: white;
   }
 
+  .action-btn.active {
+    background-color: var(--accent);
+    color: white;
+  }
+
   .new-group-input {
     display: flex;
     gap: 6px;
@@ -660,6 +688,11 @@
     background-color: rgba(127, 90, 240, 0.15);
     outline: 2px dashed var(--info);
     outline-offset: -2px;
+  }
+
+  .group-header.empty-folder {
+    cursor: default;
+    opacity: 0.5;
   }
 
   .group-header.sub {

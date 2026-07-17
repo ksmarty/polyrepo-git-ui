@@ -4,12 +4,24 @@
   import Settings from './lib/components/Settings.svelte';
   import { app } from './lib/stores.svelte';
   import type { Repository } from './lib/types';
-  import { FolderGit2, GitPullRequest, Settings as SettingsIcon, RefreshCw, Download, ExternalLink, GitMerge, History, AlertTriangle, X } from '@lucide/svelte';
+  import { FolderGit2, GitPullRequest, Settings as SettingsIcon, RefreshCw, Download, ExternalLink, GitMerge, History, AlertTriangle, X, Code, CircleDot, Info } from '@lucide/svelte';
 
   let activeTab: 'repos' | 'prs' | 'settings' = $state('repos');
+  let expandedCommit: string | null = $state(null);
+  let showRepoInfo: boolean = $state(false);
   let editingDefaultBranch: boolean = $state(false);
   let newDefaultBranch: string = $state('');
-  let expandedCommit: string | null = $state(null);
+  let githubConnected: boolean = $state(false);
+
+  async function checkGitHubAuth() {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const auth = await invoke('get_github_auth') as { token: string | null };
+      githubConnected = !!auth.token;
+    } catch {
+      githubConnected = false;
+    }
+  }
 
   function getGitHubUrl(repo: Repository): string | null {
     if (repo.github_owner && repo.github_repo) {
@@ -23,16 +35,19 @@
     return null;
   }
 
+  function getGitHubBranchUrl(repo: Repository): string | null {
+    const baseUrl = getGitHubUrl(repo);
+    if (!baseUrl) return null;
+    return `${baseUrl}/tree/${repo.current_branch}`;
+  }
+
   function getCommitUrl(repo: Repository, hash: string): string | null {
     const baseUrl = getGitHubUrl(repo);
     if (!baseUrl) return null;
     return `${baseUrl}/commit/${hash}`;
   }
 
-  async function openGitHub() {
-    if (!app.selectedRepo) return;
-    const url = getGitHubUrl(app.selectedRepo);
-    if (!url) return;
+  async function openUrl(url: string) {
     try {
       const { open } = await import('@tauri-apps/plugin-shell');
       await open(url);
@@ -41,16 +56,36 @@
     }
   }
 
+  async function openGitHub() {
+    if (!app.selectedRepo) return;
+    const url = getGitHubBranchUrl(app.selectedRepo);
+    if (url) await openUrl(url);
+  }
+
+  async function openInVSCode() {
+    if (!app.selectedRepo) return;
+    try {
+      const { open } = await import('@tauri-apps/plugin-shell');
+      await open(app.selectedRepo.path, 'code');
+    } catch (e) {
+      console.error('Failed to open VSCode:', e);
+    }
+  }
+
+  async function openInIntelliJ() {
+    if (!app.selectedRepo) return;
+    try {
+      const { open } = await import('@tauri-apps/plugin-shell');
+      await open(app.selectedRepo.path, 'idea');
+    } catch (e) {
+      console.error('Failed to open IntelliJ:', e);
+    }
+  }
+
   async function openCommitUrl(hash: string) {
     if (!app.selectedRepo) return;
     const url = getCommitUrl(app.selectedRepo, hash);
-    if (!url) return;
-    try {
-      const { open } = await import('@tauri-apps/plugin-shell');
-      await open(url);
-    } catch (e) {
-      console.error('Failed to open URL:', e);
-    }
+    if (url) await openUrl(url);
   }
 
   async function saveDefaultBranch() {
@@ -58,11 +93,6 @@
     const val = newDefaultBranch.trim() || null;
     await app.saveDefaultBranch(app.selectedRepo.id, val);
     editingDefaultBranch = false;
-  }
-
-  function startEditDefaultBranch() {
-    newDefaultBranch = app.selectedRepo?.default_branch ?? '';
-    editingDefaultBranch = true;
   }
 
   function handleThemeChange(event: CustomEvent<string>) {
@@ -74,6 +104,7 @@
   }
 
   app.loadAll();
+  checkGitHubAuth();
 </script>
 
 <div class="app">
@@ -91,14 +122,16 @@
         <FolderGit2 size={16} />
         Repos
       </button>
-      <button
-        class="tab"
-        class:active={activeTab === 'prs'}
-        onclick={() => activeTab = 'prs'}
-      >
-        <GitPullRequest size={16} />
-        Pull Requests
-      </button>
+      {#if githubConnected}
+        <button
+          class="tab"
+          class:active={activeTab === 'prs'}
+          onclick={() => activeTab = 'prs'}
+        >
+          <GitPullRequest size={16} />
+          Pull Requests
+        </button>
+      {/if}
       <button
         class="tab"
         class:active={activeTab === 'settings'}
@@ -120,7 +153,9 @@
   </header>
 
   <div class="main">
-    <Sidebar />
+    {#if activeTab === 'repos'}
+      <Sidebar />
+    {/if}
 
     <main class="content">
       {#if activeTab === 'repos'}
@@ -130,43 +165,69 @@
               <div class="repo-header">
                 <div>
                   <h2>{app.selectedRepo.name}</h2>
-                  <p class="repo-path">{app.selectedRepo.path}</p>
                 </div>
                 <div class="repo-actions">
                   <button
-                    class="icon-btn"
+                    class="action-btn"
                     onclick={() => app.refreshRepo(app.selectedRepo!.id)}
                     disabled={app.refreshingRepo === app.selectedRepo.id}
                     title="Refresh repo status"
                   >
                     <RefreshCw size={14} class={app.refreshingRepo === app.selectedRepo.id ? 'spin' : ''} />
+                    <span>Refresh</span>
                   </button>
                   <button
-                    class="icon-btn"
+                    class="action-btn"
                     onclick={() => app.fetchRepo(app.selectedRepo!.id)}
                     title="Fetch from remote"
                   >
                     <Download size={14} />
+                    <span>Fetch</span>
                   </button>
                   {#if app.selectedRepo.sync_status && app.selectedRepo.sync_status.behind > 0}
                     <button
-                      class="icon-btn merge-btn"
+                      class="action-btn merge-btn"
                       onclick={() => app.mergeRepo(app.selectedRepo!.id)}
                       disabled={app.mergingRepo === app.selectedRepo.id}
                       title="Merge changes from base branch"
                     >
                       <GitMerge size={14} class={app.mergingRepo === app.selectedRepo.id ? 'spin' : ''} />
+                      <span>Merge</span>
                     </button>
                   {/if}
+                  <button
+                    class="action-btn"
+                    onclick={openInVSCode}
+                    title="Open in VS Code"
+                  >
+                    <Code size={14} />
+                    <span>VS Code</span>
+                  </button>
+                  <button
+                    class="action-btn"
+                    onclick={openInIntelliJ}
+                    title="Open in IntelliJ"
+                  >
+                    <CircleDot size={14} />
+                    <span>IntelliJ</span>
+                  </button>
                   {#if getGitHubUrl(app.selectedRepo)}
                     <button
-                      class="icon-btn"
+                      class="action-btn"
                       onclick={openGitHub}
-                      title="Open on GitHub"
+                      title="Open on GitHub (current branch)"
                     >
                       <ExternalLink size={14} />
+                      <span>GitHub</span>
                     </button>
                   {/if}
+                  <button
+                    class="icon-btn"
+                    onclick={() => showRepoInfo = true}
+                    title="Repo details"
+                  >
+                    <Info size={14} />
+                  </button>
                 </div>
               </div>
 
@@ -188,37 +249,6 @@
                       {app.selectedRepo.sync_status.behind} behind, {app.selectedRepo.sync_status.ahead} ahead
                     {/if}
                   </span>
-                {/if}
-              </div>
-
-              <div class="repo-meta">
-                <div class="meta-row">
-                  <span class="meta-label">Default Branch</span>
-                  {#if editingDefaultBranch}
-                    <div class="inline-edit">
-                      <input
-                        type="text"
-                        bind:value={newDefaultBranch}
-                        placeholder="e.g. main"
-                        onkeydown={(e) => {
-                          if (e.key === 'Enter') saveDefaultBranch();
-                          if (e.key === 'Escape') editingDefaultBranch = false;
-                        }}
-                      />
-                      <button class="save-btn" onclick={saveDefaultBranch}>Save</button>
-                      <button class="cancel-btn" onclick={() => editingDefaultBranch = false}>Cancel</button>
-                    </div>
-                  {:else}
-                    <button class="meta-value" onclick={startEditDefaultBranch}>
-                      {app.selectedRepo.default_branch ?? app.config.default_branch}
-                    </button>
-                  {/if}
-                </div>
-                {#if app.selectedRepo.remote_url}
-                  <div class="meta-row">
-                    <span class="meta-label">Remote</span>
-                    <span class="meta-value mono">{app.selectedRepo.remote_url}</span>
-                  </div>
                 {/if}
               </div>
 
@@ -293,6 +323,64 @@
     </main>
   </div>
 </div>
+
+{#if showRepoInfo && app.selectedRepo}
+  <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+  <div class="modal-overlay" onclick={() => showRepoInfo = false}>
+    <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+    <div class="modal-content" onclick={(e) => e.stopPropagation()}>
+      <div class="modal-header">
+        <h3>
+          <Info size={18} />
+          {app.selectedRepo.name}
+        </h3>
+        <button class="modal-close" onclick={() => showRepoInfo = false}>
+          <X size={16} />
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="info-rows">
+          <div class="info-row">
+            <span class="info-label">Path</span>
+            <span class="info-value mono">{app.selectedRepo.path}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Current Branch</span>
+            <span class="info-value mono">{app.selectedRepo.current_branch}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Default Branch</span>
+            {#if editingDefaultBranch}
+              <div class="inline-edit">
+                <input
+                  type="text"
+                  bind:value={newDefaultBranch}
+                  placeholder="e.g. main"
+                  onkeydown={(e) => {
+                    if (e.key === 'Enter') saveDefaultBranch();
+                    if (e.key === 'Escape') editingDefaultBranch = false;
+                  }}
+                />
+                <button class="save-btn" onclick={saveDefaultBranch}>Save</button>
+                <button class="cancel-btn" onclick={() => editingDefaultBranch = false}>Cancel</button>
+              </div>
+            {:else}
+              <button class="info-value editable" onclick={() => { editingDefaultBranch = true; newDefaultBranch = app.selectedRepo?.default_branch ?? ''; }}>
+                {app.selectedRepo.default_branch ?? app.config.default_branch}
+              </button>
+            {/if}
+          </div>
+          {#if app.selectedRepo.remote_url}
+            <div class="info-row">
+              <span class="info-label">Remote</span>
+              <span class="info-value mono">{app.selectedRepo.remote_url}</span>
+            </div>
+          {/if}
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
 
 {#if app.showMergeConflict && app.mergeResult}
   <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
@@ -422,13 +510,6 @@
     letter-spacing: -0.02em;
   }
 
-  .repo-path {
-    color: var(--text-secondary);
-    font-size: 13px;
-    font-family: monospace;
-    margin-bottom: 16px;
-  }
-
   .repo-status {
     display: flex;
     align-items: center;
@@ -516,6 +597,40 @@
   .repo-actions {
     display: flex;
     gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .action-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 10px;
+    background-color: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 6px;
+    white-space: nowrap;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    background-color: var(--accent);
+    color: white;
+  }
+
+  .action-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .action-btn.merge-btn {
+    background-color: rgba(44, 182, 125, 0.15);
+    color: var(--success);
+  }
+
+  .action-btn.merge-btn:hover:not(:disabled) {
+    background-color: var(--success);
+    color: white;
   }
 
   .icon-btn {
@@ -544,47 +659,6 @@
   .sync-badge.dirty {
     background-color: rgba(242, 95, 76, 0.15);
     color: var(--danger);
-  }
-
-  .repo-meta {
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .meta-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .meta-label {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-secondary);
-    min-width: 100px;
-  }
-
-  .meta-value {
-    font-size: 13px;
-    background: transparent;
-    color: var(--text-primary);
-    text-align: left;
-    padding: 2px 6px;
-    border-radius: 4px;
-  }
-
-  .meta-value:hover {
-    background-color: var(--bg-tertiary);
-  }
-
-  .meta-value.mono {
-    font-family: monospace;
-    font-size: 12px;
-    color: var(--text-secondary);
   }
 
   .inline-edit {
@@ -619,14 +693,47 @@
     background-color: var(--bg-tertiary);
   }
 
-  .merge-btn {
-    background-color: rgba(44, 182, 125, 0.15);
-    color: var(--success);
+  .info-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
   }
 
-  .merge-btn:hover:not(:disabled) {
-    background-color: var(--success);
-    color: white;
+  .info-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .info-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .info-value {
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .info-value.mono {
+    font-family: monospace;
+    font-size: 12px;
+    word-break: break-all;
+  }
+
+  .info-value.editable {
+    background: transparent;
+    text-align: left;
+    padding: 2px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .info-value.editable:hover {
+    background-color: var(--bg-tertiary);
   }
 
   .git-history {

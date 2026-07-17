@@ -1,15 +1,15 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
-  import type { AppConfig, Repository, RepoGroup } from '../types';
+  import type { AppConfig, Repository } from '../types';
   import AuthSetup from './AuthSetup.svelte';
-  import { Settings as SettingsIcon, FolderGit2, FolderOpen, GitBranch, Plus, Trash2 } from '@lucide/svelte';
+  import { Settings as SettingsIcon, FolderGit2, GitBranch, Trash2 } from '@lucide/svelte';
 
   const dispatch = createEventDispatcher<{
     themeChange: string;
     dataChange: void;
   }>();
 
-  let activeSection: 'general' | 'repos' | 'groups' | 'github' = $state('general');
+  let activeSection: 'general' | 'repos' | 'github' = $state('general');
 
   let config: AppConfig = $state({
     default_branch: 'main',
@@ -20,9 +20,7 @@
   });
 
   let repos: Repository[] = $state([]);
-  let groups: RepoGroup[] = $state([]);
   let newRepoPath: string = $state('');
-  let newGroupName: string = $state('');
   let loading: boolean = $state(false);
   let error: string | null = $state(null);
   let saveTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -41,7 +39,6 @@
   onMount(async () => {
     await loadConfig();
     await loadRepos();
-    await loadGroups();
   });
 
   async function loadConfig() {
@@ -75,15 +72,6 @@
     }
   }
 
-  async function loadGroups() {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      groups = await invoke('get_groups');
-    } catch (e) {
-      console.error('Failed to load groups:', e);
-    }
-  }
-
   async function addRepo() {
     if (!newRepoPath) return;
     loading = true;
@@ -109,41 +97,6 @@
       dispatch('dataChange');
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to remove repo';
-    }
-  }
-
-  async function createGroup() {
-    if (!newGroupName) return;
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('create_group', { name: newGroupName });
-      newGroupName = '';
-      await loadGroups();
-      dispatch('dataChange');
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to create group';
-    }
-  }
-
-  async function deleteGroup(id: string) {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('delete_group', { id });
-      await loadGroups();
-      dispatch('dataChange');
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to delete group';
-    }
-  }
-
-  async function moveToGroup(repoId: string, groupId: string | null) {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('move_repo_to_group', { repoId, groupId });
-      await loadRepos();
-      dispatch('dataChange');
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to move repo';
     }
   }
 
@@ -177,14 +130,6 @@
     >
       <FolderGit2 size={16} />
       Repositories
-    </button>
-    <button
-      class="nav-item"
-      class:active={activeSection === 'groups'}
-      onclick={() => activeSection = 'groups'}
-    >
-      <FolderOpen size={16} />
-      Folders
     </button>
     <button
       class="nav-item"
@@ -278,18 +223,6 @@
                 <span class="item-detail">{repo.path}</span>
               </div>
               <div class="item-actions">
-                <select
-                  value={repo.group_id ?? ''}
-                  onchange={(e) => {
-                    const val = (e.target as HTMLSelectElement).value;
-                    moveToGroup(repo.id, val || null);
-                  }}
-                >
-                  <option value="">No folder</option>
-                  {#each groups as group}
-                    <option value={group.id}>{group.name}</option>
-                  {/each}
-                </select>
                 <button class="danger-btn-sm" onclick={() => removeRepo(repo.id)}>
                   <Trash2 size={14} />
                 </button>
@@ -299,41 +232,6 @@
 
           {#if repos.length === 0}
             <p class="empty-text">No repos added yet</p>
-          {/if}
-        </div>
-      </div>
-
-    {:else if activeSection === 'groups'}
-      <div class="section">
-        <h3>Folders</h3>
-
-        <div class="add-row">
-          <input
-            type="text"
-            bind:value={newGroupName}
-            placeholder="Folder name"
-            onkeydown={(e) => e.key === 'Enter' && createGroup()}
-          />
-          <button class="accent-btn" onclick={createGroup} disabled={!newGroupName}>
-            <Plus size={16} />
-            Create
-          </button>
-        </div>
-
-        <div class="item-list">
-          {#each groups as group (group.id)}
-            <div class="item-row">
-              <div class="item-info">
-                <span class="item-name">{group.name}</span>
-              </div>
-              <button class="danger-btn-sm" onclick={() => deleteGroup(group.id)}>
-                <Trash2 size={14} />
-              </button>
-            </div>
-          {/each}
-
-          {#if groups.length === 0}
-            <p class="empty-text">No folders created yet</p>
           {/if}
         </div>
       </div>

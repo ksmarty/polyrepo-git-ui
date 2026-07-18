@@ -87,9 +87,13 @@ class AppState {
 
   async fetchRepo(id: string) {
     try {
+      console.log('[polyrepo] fetchRepo start', id);
       await api.fetchRepo(id);
+      console.log('[polyrepo] fetchRepo done, refreshing');
       await this.refreshRepo(id);
+      console.log('[polyrepo] refresh done');
     } catch (e) {
+      console.error('[polyrepo] fetchRepo error', e);
       this.errorMsg = `Fetch failed: ${e}`;
       this.showError = true;
     }

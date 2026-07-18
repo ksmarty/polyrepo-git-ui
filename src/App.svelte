@@ -19,6 +19,7 @@
   let committing: boolean = $state(false);
   let pushing: boolean = $state(false);
   let mergeTargetBranch: string = $state('');
+  let showDiffModal: boolean = $state(false);
 
   async function checkGitHubAuth() {
     try {
@@ -402,38 +403,11 @@
                     {/if}
                   </h3>
                   <div class="file-changes-split">
-                    {#if app.gitStatus.staged.length > 0}
-                      <div class="file-group">
-                        <span class="file-group-label">Staged</span>
-                        {#each app.gitStatus.staged as file (file.path)}
-                          <div class="file-row clickable" onclick={() => app.loadDiff(app.selectedRepo!.id, file.path, true)}>
-                            <span class="file-change-tag staged">{file.change}</span>
-                            <span class="file-path">{file.path}</span>
-                            <button
-                              class="file-action-btn"
-                              onclick={(e) => { e.stopPropagation(); app.unstageFile(app.selectedRepo!.id, file.path); }}
-                              title="Unstage"
-                            >
-                              <X size={12} />
-                            </button>
-                          </div>
-                          {#if app.diffFile === file.path}
-                            <div class="diff-viewer">
-                              {#if app.loadingDiff}
-                                <p class="loading-text">Loading diff...</p>
-                              {:else}
-                                <pre class="diff-content">{app.diffContent}</pre>
-                              {/if}
-                            </div>
-                          {/if}
-                        {/each}
-                      </div>
-                    {/if}
                     {#if app.gitStatus.unstaged.length > 0}
                       <div class="file-group">
                         <span class="file-group-label">Unstaged</span>
                         {#each app.gitStatus.unstaged as file (file.path)}
-                          <div class="file-row clickable" onclick={() => app.loadDiff(app.selectedRepo!.id, file.path, false)}>
+                          <div class="file-row clickable" onclick={() => { app.loadDiff(app.selectedRepo!.id, file.path, false); showDiffModal = true; }}>
                             <span class="file-change-tag unstaged">{file.change}</span>
                             <span class="file-path">{file.path}</span>
                             {#if file.change === 'U'}
@@ -461,15 +435,24 @@
                               </button>
                             {/if}
                           </div>
-                          {#if app.diffFile === file.path}
-                            <div class="diff-viewer">
-                              {#if app.loadingDiff}
-                                <p class="loading-text">Loading diff...</p>
-                              {:else}
-                                <pre class="diff-content">{app.diffContent}</pre>
-                              {/if}
-                            </div>
-                          {/if}
+                        {/each}
+                      </div>
+                    {/if}
+                    {#if app.gitStatus.staged.length > 0}
+                      <div class="file-group">
+                        <span class="file-group-label">Staged</span>
+                        {#each app.gitStatus.staged as file (file.path)}
+                          <div class="file-row clickable" onclick={() => { app.loadDiff(app.selectedRepo!.id, file.path, true); showDiffModal = true; }}>
+                            <span class="file-change-tag staged">{file.change}</span>
+                            <span class="file-path">{file.path}</span>
+                            <button
+                              class="file-action-btn"
+                              onclick={(e) => { e.stopPropagation(); app.unstageFile(app.selectedRepo!.id, file.path); }}
+                              title="Unstage"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
                         {/each}
                       </div>
                     {/if}
@@ -843,6 +826,59 @@
       </div>
       <div class="modal-actions">
         <button class="close-btn" onclick={() => app.showPullStrategy = false}>Cancel</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if showDiffModal && app.diffFile}
+  <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+  <div class="modal-overlay" onclick={() => { showDiffModal = false; app.diffFile = null; }} onkeydown={(e) => e.key === 'Escape' && (showDiffModal = false)}>
+    <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+    <div class="modal-content diff-modal" onclick={(e) => e.stopPropagation()} onkeydown={(e) => { if (e.key === 'Escape') { showDiffModal = false; } else { e.stopPropagation(); } }}>
+      <div class="modal-header">
+        <h3>
+          <FileDiff size={18} />
+          {app.diffStaged ? 'Staged' : 'Unstaged'}: {app.diffFile}
+        </h3>
+        <button class="modal-close" onclick={() => { showDiffModal = false; app.diffFile = null; }}>
+          <X size={16} />
+        </button>
+      </div>
+      <div class="modal-body diff-body">
+        {#if app.loadingDiff}
+          <p class="loading-text">Loading diff...</p>
+        {:else if !app.diffContent}
+          <p class="empty-text">No changes to display</p>
+        {:else}
+          <div class="diff-highlighted">
+            {#each app.diffContent.split('\n') as line}
+              {#if line.startsWith('+')}
+                <div class="diff-line added"><span class="diff-prefix">+</span>{line.slice(1)}</div>
+              {:else if line.startsWith('-')}
+                <div class="diff-line removed"><span class="diff-prefix">-</span>{line.slice(1)}</div>
+              {:else if line.startsWith('@@')}
+                <div class="diff-line hunk">{line}</div>
+              {:else}
+                <div class="diff-line">{line}</div>
+              {/if}
+            {/each}
+          </div>
+        {/if}
+      </div>
+      <div class="modal-actions">
+        {#if !app.diffStaged && app.diffFile}
+          <button class="merge-option-btn" onclick={() => { app.stageFile(app.selectedRepo!.id, app.diffFile!); showDiffModal = false; }}>
+            <ArrowRightLeft size={14} />
+            Stage
+          </button>
+        {:else if app.diffStaged && app.diffFile}
+          <button class="merge-option-btn secondary" onclick={() => { app.unstageFile(app.selectedRepo!.id, app.diffFile!); showDiffModal = false; }}>
+            <X size={14} />
+            Unstage
+          </button>
+        {/if}
+        <button class="close-btn" onclick={() => { showDiffModal = false; app.diffFile = null; }}>Close</button>
       </div>
     </div>
   </div>
@@ -1679,24 +1715,6 @@
     cursor: pointer;
   }
 
-  .diff-viewer {
-    margin: 4px 0 8px 0;
-    padding: 8px;
-    background-color: var(--bg-primary);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    overflow-x: auto;
-  }
-
-  .diff-content {
-    font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
-    font-size: 11px;
-    line-height: 1.4;
-    white-space: pre;
-    margin: 0;
-    color: var(--text-primary);
-  }
-
   .file-change-tag {
     display: inline-flex;
     align-items: center;
@@ -1976,5 +1994,56 @@
   .strategy-desc {
     color: var(--text-secondary);
     font-size: 12px;
+  }
+
+  .diff-modal {
+    max-width: 900px;
+    width: 95vw;
+  }
+
+  .diff-body {
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .diff-highlighted {
+    font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-x: auto;
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  .diff-line {
+    padding: 1px 12px;
+    white-space: pre;
+    border-left: 3px solid transparent;
+  }
+
+  .diff-line.added {
+    background-color: rgba(44, 182, 125, 0.15);
+    border-left-color: var(--success);
+    color: var(--success);
+  }
+
+  .diff-line.removed {
+    background-color: rgba(242, 95, 76, 0.15);
+    border-left-color: var(--danger);
+    color: var(--danger);
+  }
+
+  .diff-line.hunk {
+    background-color: rgba(127, 90, 240, 0.1);
+    color: var(--accent);
+    font-weight: 600;
+    padding: 4px 12px;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .diff-prefix {
+    color: var(--text-secondary);
+    margin-right: 4px;
   }
 </style>

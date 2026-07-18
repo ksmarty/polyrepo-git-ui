@@ -22,6 +22,7 @@ class AppState {
   showPullStrategy: boolean = $state(false);
   diffFile: string | null = $state(null);
   diffContent: string = $state('');
+  diffStaged: boolean = $state(false);
   loadingDiff: boolean = $state(false);
   errorMsg: string | null = $state(null);
   showError: boolean = $state(false);
@@ -225,14 +226,9 @@ class AppState {
   }
 
   async loadDiff(id: string, file: string, staged: boolean) {
-    if (this.diffFile === file) {
-      // Toggle off if clicking same file
-      this.diffFile = null;
-      this.diffContent = '';
-      return;
-    }
     this.loadingDiff = true;
     this.diffFile = file;
+    this.diffStaged = staged;
     try {
       this.diffContent = await api.getFileDiff(id, file, staged);
     } catch (e) {

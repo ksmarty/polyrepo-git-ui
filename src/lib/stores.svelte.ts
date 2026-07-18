@@ -61,6 +61,7 @@ class AppState {
     this.selectedRepo = repo;
     await this.refreshRepo(repo.id);
     await this.loadGitLog(repo.id);
+    await this.loadGitStatus(repo.id);
   }
 
   async refreshRepo(id: string) {
@@ -291,6 +292,18 @@ class AppState {
     try {
       await api.resolveConflict(id, file, resolution);
       this.showNotification('success', `Resolved ${file} using ${resolution}`);
+
+      // Reload status so the file changes panel + merge state updates
+      const status = await api.getGitStatus(id);
+      this.gitStatus = status;
+
+      // Update the merge conflicts list in the modal
+      if (this.mergeResult?.conflicts) {
+        this.mergeResult = {
+          ...this.mergeResult,
+          conflicts: this.mergeResult.conflicts.filter(c => c.file !== file),
+        };
+      }
     } catch (e) {
       this.showNotification('error', `Resolution failed: ${e}`);
     }

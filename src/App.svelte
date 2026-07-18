@@ -4,7 +4,7 @@
   import Settings from './lib/components/Settings.svelte';
   import { app } from './lib/stores.svelte';
   import type { Repository } from './lib/types';
-  import { FolderGit2, GitPullRequest, Settings as SettingsIcon, RefreshCw, Download, ExternalLink, GitMerge, History, AlertTriangle, X, Code, CircleDot, Info, ArrowDownToLine, MoreHorizontal, FolderOpen } from '@lucide/svelte';
+  import { FolderGit2, GitPullRequest, Settings as SettingsIcon, RefreshCw, Download, ExternalLink, GitMerge, History, AlertTriangle, X, Code, CircleDot, Info, ArrowDownToLine, MoreHorizontal, FolderOpen, Upload, SquareStack, Check, ArrowRightLeft, CheckCircle, XCircle, ChevronDown, FileDiff } from '@lucide/svelte';
 
   let activeTab: 'repos' | 'prs' | 'settings' = $state('repos');
   let expandedCommit: string | null = $state(null);
@@ -13,6 +13,10 @@
   let newDefaultBranch: string = $state('');
   let githubConnected: boolean = $state(false);
   let showOpenMenu: boolean = $state(false);
+  let showBranchMenu: boolean = $state(false);
+  let commitMessage: string = $state('');
+  let committing: boolean = $state(false);
+  let pushing: boolean = $state(false);
 
   async function checkGitHubAuth() {
     try {
@@ -110,6 +114,33 @@
       if (!target.closest('.open-menu-wrapper')) {
         showOpenMenu = false;
       }
+    }
+    if (showBranchMenu) {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.branch-menu-wrapper')) {
+        showBranchMenu = false;
+      }
+    }
+  }
+
+  async function handleCommit() {
+    if (!app.selectedRepo || !commitMessage.trim()) return;
+    committing = true;
+    try {
+      await app.commit(app.selectedRepo.id, commitMessage.trim());
+      commitMessage = '';
+    } finally {
+      committing = false;
+    }
+  }
+
+  async function handlePush() {
+    if (!app.selectedRepo) return;
+    pushing = true;
+    try {
+      await app.pushRepo(app.selectedRepo.id);
+    } finally {
+      pushing = false;
     }
   }
 
@@ -215,6 +246,15 @@
                       <span>Merge</span>
                     </button>
                   {/if}
+                  <button
+                    class="action-btn"
+                    onclick={handlePush}
+                    disabled={pushing}
+                    title="Push to remote"
+                  >
+                    <Upload size={14} class={pushing ? 'spin' : ''} />
+                    <span>Push</span>
+                  </button>
                   <div class="action-divider"></div>
                   <div class="open-menu-wrapper">
                     <button
@@ -257,7 +297,32 @@
               </div>
 
               <div class="repo-status">
-                <span class="branch">{app.selectedRepo.current_branch}</span>
+                <div class="branch-menu-wrapper">
+                  <button
+                    class="branch-btn"
+                    onclick={() => showBranchMenu = !showBranchMenu}
+                    title="Switch branch"
+                  >
+                    <span class="branch">{app.selectedRepo.current_branch}</span>
+                    <ChevronDown size={12} />
+                  </button>
+                  {#if showBranchMenu}
+                    <div class="branch-menu" onclick={(e) => e.stopPropagation()}>
+                      {#each app.selectedRepo.local_branches as br}
+                        <button
+                          class="branch-menu-item"
+                          class:active={br === app.selectedRepo.current_branch}
+                          onclick={() => { app.switchBranch(app.selectedRepo!.id, br); showBranchMenu = false; }}
+                        >
+                          {br}
+                          {#if br === app.selectedRepo.current_branch}
+                            <Check size={12} />
+                          {/if}
+                        </button>
+                      {/each}
+                    </div>
+                  {/if}
+                </div>
                 {#if app.selectedRepo.sync_status}
                   <span
                     class="sync-badge"
@@ -276,6 +341,107 @@
                   </span>
                 {/if}
               </div>
+
+              {#if app.gitStatus && (app.gitStatus.staged.length > 0 || app.gitStatus.unstaged.length > 0)}
+                <div class="file-changes">
+                  <h3 class="section-title">
+                    <FileDiff size={14} />
+                    Changes
+                    {#if app.gitStatus.merge_in_progress}
+                      <span class="merge-tag">MERGING</span>
+                    {/if}
+                  </h3>
+                  {#if app.gitStatus.staged.length > 0}
+                    <div class="file-group">
+                      <span class="file-group-label">Staged</span>
+                      {#each app.gitStatus.staged as file (file.path)}
+                        <div class="file-row">
+                          <span class="file-change-tag staged">{file.change}</span>
+                          <span class="file-path">{file.path}</span>
+                          <button
+                            class="file-action-btn"
+                            onclick={() => app.unstageFile(app.selectedRepo!.id, file.path)}
+                            title="Unstage"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+                  {#if app.gitStatus.unstaged.length > 0}
+                    <div class="file-group">
+                      <span class="file-group-label">Unstaged</span>
+                      {#each app.gitStatus.unstaged as file (file.path)}
+                        <div class="file-row">
+                          <span class="file-change-tag unstaged">{file.change}</span>
+                          <span class="file-path">{file.path}</span>
+                          {#if file.change === 'U'}
+                            <button
+                              class="file-action-btn accept"
+                              onclick={() => app.resolveFileConflict(app.selectedRepo!.id, file.path, 'ours')}
+                              title="Accept ours"
+                            >
+                              <CheckCircle size={12} />
+                            </button>
+                            <button
+                              class="file-action-btn accept"
+                              onclick={() => app.resolveFileConflict(app.selectedRepo!.id, file.path, 'theirs')}
+                              title="Accept theirs"
+                            >
+                              <XCircle size={12} />
+                            </button>
+                          {:else}
+                            <button
+                              class="file-action-btn"
+                              onclick={() => app.stageFile(app.selectedRepo!.id, file.path)}
+                              title="Stage"
+                            >
+                              <ArrowRightLeft size={12} />
+                            </button>
+                          {/if}
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+
+                  <div class="commit-area">
+                    <div class="stage-all-actions">
+                      <button class="small-btn" onclick={() => app.stageAll(app.selectedRepo!.id)}>
+                        Stage All
+                      </button>
+                      <button class="small-btn" onclick={() => app.stashRepo(app.selectedRepo!.id)}>
+                        <SquareStack size={12} />
+                        Stash
+                      </button>
+                    </div>
+                    <div class="commit-input-row">
+                      <input
+                        class="commit-input"
+                        type="text"
+                        bind:value={commitMessage}
+                        placeholder="Commit message..."
+                        onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleCommit(); } }}
+                      />
+                      <button
+                        class="commit-btn"
+                        onclick={handleCommit}
+                        disabled={committing || !commitMessage.trim()}
+                      >
+                        {committing ? '...' : 'Commit'}
+                      </button>
+                    </div>
+                    {#if app.gitStatus.merge_in_progress && !app.gitStatus.has_conflicts}
+                      <button
+                        class="continue-merge-btn"
+                        onclick={() => app.continueMerge(app.selectedRepo!.id)}
+                      >
+                        Complete Merge
+                      </button>
+                    {/if}
+                  </div>
+                </div>
+              {/if}
 
               <div class="git-history">
                 <h3 class="section-title">
@@ -348,6 +514,17 @@
     </main>
   </div>
 </div>
+
+{#if app.notification}
+  <div class="notification-toast" class:success={app.notification.type === 'success'} class:error={app.notification.type === 'error'}>
+    {#if app.notification.type === 'success'}
+      <CheckCircle size={14} />
+    {:else}
+      <XCircle size={14} />
+    {/if}
+    <span>{app.notification.message}</span>
+  </div>
+{/if}
 
 {#if showRepoInfo && app.selectedRepo}
   <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
@@ -446,21 +623,39 @@
         {/if}
         {#if app.mergeResult.conflicts && app.mergeResult.conflicts.length > 0}
           <div class="conflict-list">
-            <p class="conflict-title">Conflicting files:</p>
+            <p class="conflict-title">Conflicting files — click to resolve:</p>
             {#each app.mergeResult.conflicts as conflict}
               <div class="conflict-item">
                 <span class="conflict-file">{conflict.file}</span>
-                <span class="conflict-status">{conflict.status}</span>
+                <div class="conflict-actions">
+                  <button
+                    class="conflict-resolve-btn ours"
+                    onclick={() => app.resolveFileConflict(app.selectedRepo!.id, conflict.file, 'ours')}
+                    title="Accept our version"
+                  >
+                    Ours
+                  </button>
+                  <button
+                    class="conflict-resolve-btn theirs"
+                    onclick={() => app.resolveFileConflict(app.selectedRepo!.id, conflict.file, 'theirs')}
+                    title="Accept their version"
+                  >
+                    Theirs
+                  </button>
+                </div>
               </div>
             {/each}
           </div>
-          <p class="conflict-hint">Resolve conflicts in your editor, then commit the merge.</p>
+          <p class="conflict-hint">After resolving all conflicts, click Complete Merge.</p>
         {/if}
       </div>
       <div class="modal-actions">
         {#if app.mergeResult.conflicts && app.mergeResult.conflicts.length > 0}
           <button class="abort-btn" onclick={() => app.abortMerge(app.selectedRepo!.id)}>
             Abort Merge
+          </button>
+          <button class="continue-btn" onclick={() => app.continueMerge(app.selectedRepo!.id)}>
+            Complete Merge
           </button>
         {/if}
         <button class="close-btn" onclick={() => app.showMergeConflict = false}>
@@ -1066,11 +1261,6 @@
     color: var(--text-primary);
   }
 
-  .conflict-status {
-    color: var(--danger);
-    font-size: 11px;
-  }
-
   .conflict-hint {
     font-size: 12px;
     color: var(--text-secondary);
@@ -1173,5 +1363,307 @@
     border-radius: 8px;
     max-height: 300px;
     overflow-y: auto;
+  }
+
+  .notification-toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    z-index: 200;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    animation: slideUp 0.2s ease-out;
+  }
+
+  .notification-toast.success {
+    background-color: rgba(44, 182, 125, 0.95);
+    color: white;
+  }
+
+  .notification-toast.error {
+    background-color: rgba(242, 95, 76, 0.95);
+    color: white;
+  }
+
+  @keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  .branch-menu-wrapper {
+    position: relative;
+  }
+
+  .branch-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-family: monospace;
+    font-weight: 500;
+  }
+
+  .branch-btn:hover {
+    background-color: var(--border);
+  }
+
+  .branch-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 4px;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    min-width: 200px;
+    max-height: 250px;
+    overflow-y: auto;
+    z-index: 50;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    padding: 4px;
+  }
+
+  .branch-menu-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 6px 10px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-family: monospace;
+    border-radius: 4px;
+  }
+
+  .branch-menu-item:hover {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .branch-menu-item.active {
+    background-color: rgba(127, 90, 240, 0.12);
+    color: var(--accent);
+  }
+
+  .file-changes {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .merge-tag {
+    background-color: rgba(249, 188, 96, 0.2);
+    color: var(--warning);
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.05em;
+  }
+
+  .file-group {
+    margin-bottom: 8px;
+  }
+
+  .file-group-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: block;
+    margin-bottom: 4px;
+    padding-left: 4px;
+  }
+
+  .file-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 4px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+
+  .file-row:hover {
+    background-color: var(--bg-tertiary);
+  }
+
+  .file-change-tag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 18px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    font-family: monospace;
+    flex-shrink: 0;
+  }
+
+  .file-change-tag.staged {
+    background-color: rgba(44, 182, 125, 0.15);
+    color: var(--success);
+  }
+
+  .file-change-tag.unstaged {
+    background-color: rgba(249, 188, 96, 0.15);
+    color: var(--warning);
+  }
+
+  .file-path {
+    flex: 1;
+    font-family: monospace;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .file-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: 4px;
+    padding: 0;
+    flex-shrink: 0;
+  }
+
+  .file-action-btn:hover {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+  }
+
+  .file-action-btn.accept {
+    color: var(--success);
+  }
+
+  .file-action-btn.accept:hover {
+    background-color: rgba(44, 182, 125, 0.12);
+  }
+
+  .commit-area {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  .stage-all-actions {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+
+  .small-btn {
+    padding: 3px 8px;
+    background-color: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .small-btn:hover {
+    background-color: var(--border);
+    color: var(--text-primary);
+  }
+
+  .commit-input-row {
+    display: flex;
+    gap: 6px;
+  }
+
+  .commit-input {
+    flex: 1;
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+
+  .commit-btn {
+    padding: 6px 14px;
+    background-color: var(--success);
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 6px;
+    white-space: nowrap;
+  }
+
+  .commit-btn:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+
+  .commit-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .continue-merge-btn {
+    width: 100%;
+    margin-top: 8px;
+    padding: 8px 14px;
+    background-color: rgba(44, 182, 125, 0.12);
+    color: var(--success);
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 6px;
+    border: 1px solid var(--success);
+  }
+
+  .continue-merge-btn:hover {
+    background-color: var(--success);
+    color: white;
+  }
+
+  .conflict-actions {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+  }
+
+  .conflict-resolve-btn {
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 4px;
+  }
+
+  .conflict-resolve-btn.ours {
+    background-color: rgba(127, 90, 240, 0.15);
+    color: var(--accent);
+  }
+
+  .conflict-resolve-btn.ours:hover {
+    background-color: var(--accent);
+    color: white;
+  }
+
+  .conflict-resolve-btn.theirs {
+    background-color: rgba(249, 188, 96, 0.15);
+    color: var(--warning);
+  }
+
+  .conflict-resolve-btn.theirs:hover {
+    background-color: var(--warning);
+    color: white;
   }
 </style>

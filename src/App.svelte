@@ -1238,9 +1238,6 @@
     margin-top: 4px;
   }
 
-  .git-history {
-  }
-
   .section-title {
     display: flex;
     align-items: center;
@@ -1660,9 +1657,6 @@
   .branch-menu-item.active {
     background-color: rgba(127, 90, 240, 0.12);
     color: var(--accent);
-  }
-
-  .file-changes {
   }
 
   .file-changes-split {

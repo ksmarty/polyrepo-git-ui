@@ -853,7 +853,9 @@
         {:else}
           <div class="diff-highlighted">
             {#each app.diffContent.split('\n') as line}
-              {#if line.startsWith('+')}
+              {#if line.startsWith('diff --git') || line.startsWith('index ') || line.startsWith('---') || line.startsWith('+++')}
+                <!-- skip diff metadata -->
+              {:else if line.startsWith('+')}
                 <div class="diff-line added"><span class="diff-prefix">+</span>{line.slice(1)}</div>
               {:else if line.startsWith('-')}
                 <div class="diff-line removed"><span class="diff-prefix">-</span>{line.slice(1)}</div>

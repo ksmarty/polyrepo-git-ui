@@ -556,7 +556,117 @@ pub fn run() {
             start_github_oauth,
             disconnect_github,
             scan_directory_for_repos,
+            get_git_status,
+            stage_file,
+            unstage_file,
+            stage_all,
+            commit,
+            push,
+            switch_branch,
+            stash,
+            stash_pop,
+            resolve_conflict,
+            continue_merge,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[tauri::command]
+async fn get_git_status(state: tauri::State<'_, AppState>, id: String) -> Result<git::GitStatus, String> {
+    let repo_path = {
+        let config = state.config.lock().await;
+        config.repos.iter().find(|r| r.id == id).map(|r| r.path.clone()).ok_or("Repo not found")?
+    };
+    git::get_git_status(&repo_path).await
+}
+
+#[tauri::command]
+async fn stage_file(state: tauri::State<'_, AppState>, id: String, file: String) -> Result<(), String> {
+    let repo_path = {
+        let config = state.config.lock().await;
+        config.repos.iter().find(|r| r.id == id).map(|r| r.path.clone()).ok_or("Repo not found")?
+    };
+    git::stage_file(&repo_path, &file).await
+}
+
+#[tauri::command]
+async fn unstage_file(state: tauri::State<'_, AppState>, id: String, file: String) -> Result<(), String> {
+    let repo_path = {
+        let config = state.config.lock().await;
+        config.repos.iter().find(|r| r.id == id).map(|r| r.path.clone()).ok_or("Repo not found")?
+    };
+    git::unstage_file(&repo_path, &file).await
+}
+
+#[tauri::command]
+async fn stage_all(state: tauri::State<'_, AppState>, id: String) -> Result<(), String> {
+    let repo_path = {
+        let config = state.config.lock().await;
+        config.repos.iter().find(|r| r.id == id).map(|r| r.path.clone()).ok_or("Repo not found")?
+    };
+    git::stage_all(&repo_path).await
+}
+
+#[tauri::command]
+async fn commit(state: tauri::State<'_, AppState>, id: String, message: String) -> Result<git::CommitResult, String> {
+    let repo_path = {
+        let config = state.config.lock().await;
+        config.repos.iter().find(|r| r.id == id).map(|r| r.path.clone()).ok_or("Repo not found")?
+    };
+    git::commit(&repo_path, &message).await
+}
+
+#[tauri::command]
+async fn push(state: tauri::State<'_, AppState>, id: String, force: bool) -> Result<String, String> {
+    let repo_path = {
+        let config = state.config.lock().await;
+        config.repos.iter().find(|r| r.id == id).map(|r| r.path.clone()).ok_or("Repo not found")?
+    };
+    git::push(&repo_path, force).await
+}
+
+#[tauri::command]
+async fn switch_branch(state: tauri::State<'_, AppState>, id: String, branch: String) -> Result<(), String> {
+    let repo_path = {
+        let config = state.config.lock().await;
+        config.repos.iter().find(|r| r.id == id).map(|r| r.path.clone()).ok_or("Repo not found")?
+    };
+    git::switch_branch(&repo_path, &branch).await
+}
+
+#[tauri::command]
+async fn stash(state: tauri::State<'_, AppState>, id: String) -> Result<(), String> {
+    let repo_path = {
+        let config = state.config.lock().await;
+        config.repos.iter().find(|r| r.id == id).map(|r| r.path.clone()).ok_or("Repo not found")?
+    };
+    git::stash(&repo_path).await
+}
+
+#[tauri::command]
+async fn stash_pop(state: tauri::State<'_, AppState>, id: String) -> Result<(), String> {
+    let repo_path = {
+        let config = state.config.lock().await;
+        config.repos.iter().find(|r| r.id == id).map(|r| r.path.clone()).ok_or("Repo not found")?
+    };
+    git::stash_pop(&repo_path).await
+}
+
+#[tauri::command]
+async fn resolve_conflict(state: tauri::State<'_, AppState>, id: String, file: String, resolution: String) -> Result<(), String> {
+    let repo_path = {
+        let config = state.config.lock().await;
+        config.repos.iter().find(|r| r.id == id).map(|r| r.path.clone()).ok_or("Repo not found")?
+    };
+    git::resolve_conflict(&repo_path, &file, &resolution).await
+}
+
+#[tauri::command]
+async fn continue_merge(state: tauri::State<'_, AppState>, id: String) -> Result<git::CommitResult, String> {
+    let repo_path = {
+        let config = state.config.lock().await;
+        config.repos.iter().find(|r| r.id == id).map(|r| r.path.clone()).ok_or("Repo not found")?
+    };
+    git::continue_merge(&repo_path).await
 }

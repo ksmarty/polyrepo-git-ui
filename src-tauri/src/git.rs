@@ -99,6 +99,317 @@ pub async fn refresh_repo(
     })
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FileItem {
+    pub path: String,
+    pub status: String, // "staged" or "unstaged"
+    pub change: String, // "M" "A" "D" "R" "??"
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct GitStatus {
+    pub staged: Vec<FileItem>,
+    pub unstaged: Vec<FileItem>,
+    pub has_conflicts: bool,
+    pub merge_in_progress: bool,
+}
+
+pub async fn get_git_status(path: &str) -> Result<GitStatus, String> {
+    let output = Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(path)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to execute git status: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut staged = Vec::new();
+    let mut unstaged = Vec::new();
+    let mut has_conflicts = false;
+
+    for line in stdout.lines() {
+        if line.len() < 3 { continue; }
+        let chars: Vec<char> = line.chars().collect();
+        let index_status = chars[0];
+        let worktree_status = chars[1];
+        let file_path = line[3..].trim().to_string();
+
+        if index_status == 'U' || worktree_status == 'U'
+            || line.contains("UU") || line.contains("AA") || line.contains("DD") {
+            has_conflicts = true;
+            unstaged.push(FileItem {
+                path: file_path,
+                status: "unstaged".to_string(),
+                change: "U".to_string(),
+            });
+            continue;
+        }
+
+        if index_status != ' ' && index_status != '?' {
+            staged.push(FileItem {
+                path: file_path.clone(),
+                status: "staged".to_string(),
+                change: index_status.to_string(),
+            });
+        }
+
+        if worktree_status != ' ' {
+            unstaged.push(FileItem {
+                path: file_path,
+                status: "unstaged".to_string(),
+                change: worktree_status.to_string(),
+            });
+        } else if index_status == '?' {
+            unstaged.push(FileItem {
+                path: file_path,
+                status: "unstaged".to_string(),
+                change: "?".to_string(),
+            });
+        }
+    }
+
+    let merge_in_progress = std::path::Path::new(path)
+        .join(".git")
+        .join("MERGE_HEAD")
+        .exists();
+
+    Ok(GitStatus {
+        staged,
+        unstaged,
+        has_conflicts,
+        merge_in_progress,
+    })
+}
+
+pub async fn stage_file(path: &str, file: &str) -> Result<(), String> {
+    let output = Command::new("git")
+        .args(["add", file])
+        .current_dir(path)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to stage file: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Failed to stage: {}", stderr));
+    }
+    Ok(())
+}
+
+pub async fn unstage_file(path: &str, file: &str) -> Result<(), String> {
+    let output = Command::new("git")
+        .args(["reset", "HEAD", "--", file])
+        .current_dir(path)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to unstage file: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Failed to unstage: {}", stderr));
+    }
+    Ok(())
+}
+
+pub async fn stage_all(path: &str) -> Result<(), String> {
+    let output = Command::new("git")
+        .args(["add", "-A"])
+        .current_dir(path)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to stage all: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Failed to stage all: {}", stderr));
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CommitResult {
+    pub success: bool,
+    pub message: String,
+    pub hash: Option<String>,
+}
+
+pub async fn commit(path: &str, message: &str) -> Result<CommitResult, String> {
+    let output = Command::new("git")
+        .args(["commit", "-m", message])
+        .current_dir(path)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to execute git commit: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let msg = if stderr.is_empty() { stdout } else { stderr };
+        return Err(format!("Commit failed: {}", msg));
+    }
+
+    let hash = Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .current_dir(path)
+        .output()
+        .await
+        .ok()
+        .and_then(|o| {
+            if o.status.success() {
+                Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+            } else {
+                None
+            }
+        });
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(CommitResult {
+        success: true,
+        message: stdout.trim().to_string(),
+        hash,
+    })
+}
+
+pub async fn push(path: &str, force: bool) -> Result<String, String> {
+    let mut args = vec!["push".to_string()];
+    if force {
+        args.push("--force-with-lease".to_string());
+    }
+
+    let output = Command::new("git")
+        .args(&args)
+        .current_dir(path)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to execute git push: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Push failed: {}", stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    Ok(format!("{}{}", stdout, stderr).trim().to_string())
+}
+
+pub async fn switch_branch(path: &str, branch: &str) -> Result<(), String> {
+    let output = Command::new("git")
+        .args(["switch", branch])
+        .current_dir(path)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to execute git switch: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Switch failed: {}", stderr));
+    }
+    Ok(())
+}
+
+pub async fn stash(path: &str) -> Result<(), String> {
+    let output = Command::new("git")
+        .args(["stash"])
+        .current_dir(path)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to stash: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Stash failed: {}", stderr));
+    }
+    Ok(())
+}
+
+pub async fn stash_pop(path: &str) -> Result<(), String> {
+    let output = Command::new("git")
+        .args(["stash", "pop"])
+        .current_dir(path)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to stash pop: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Stash pop failed: {}", stderr));
+    }
+    Ok(())
+}
+
+pub async fn resolve_conflict(path: &str, file: &str, resolution: &str) -> Result<(), String> {
+    let output = match resolution {
+        "ours" => {
+            Command::new("git")
+                .args(["checkout", "--ours", file])
+                .current_dir(path)
+                .output()
+                .await
+                .map_err(|e| format!("Failed to checkout --ours: {}", e))?
+        }
+        "theirs" => {
+            Command::new("git")
+                .args(["checkout", "--theirs", file])
+                .current_dir(path)
+                .output()
+                .await
+                .map_err(|e| format!("Failed to checkout --theirs: {}", e))?
+        }
+        _ => return Err(format!("Invalid resolution: {}", resolution)),
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Failed to resolve conflict: {}", stderr));
+    }
+
+    stage_file(path, file).await?;
+    Ok(())
+}
+
+pub async fn continue_merge(path: &str) -> Result<CommitResult, String> {
+    let status = get_git_status(path).await?;
+    if status.has_conflicts {
+        return Err("Cannot continue merge: unresolved conflicts remain".to_string());
+    }
+
+    let output = Command::new("git")
+        .args(["commit", "--no-edit"])
+        .current_dir(path)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to continue merge: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let msg = if stderr.is_empty() { stdout } else { stderr };
+        return Err(format!("Merge continue failed: {}", msg));
+    }
+
+    let hash = Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .current_dir(path)
+        .output()
+        .await
+        .ok()
+        .and_then(|o| {
+            if o.status.success() {
+                Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+            } else {
+                None
+            }
+        });
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(CommitResult {
+        success: true,
+        message: stdout.trim().to_string(),
+        hash,
+    })
+}
+
 pub async fn fetch_repo(path: &str) -> Result<(), String> {
     let output = Command::new("git")
         .arg("fetch")

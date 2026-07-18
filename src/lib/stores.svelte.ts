@@ -1,5 +1,5 @@
 import type { Repository, RepoGroup, AppConfig } from './types';
-import type { GitLogEntry, MergeResult } from './tauri';
+import type { GitLogEntry, MergeResult, GitStatus } from './tauri';
 import * as api from './tauri';
 
 class AppState {
@@ -8,7 +8,9 @@ class AppState {
   selectedRepo: Repository | null = $state(null);
   config: AppConfig = $state({ default_branch: 'main', default_repo_location: '', theme: 'midnight', auto_fetch_on_open: true, fetch_interval_seconds: 300, sidebar_width: 300 });
   gitLog: GitLogEntry[] = $state([]);
+  gitStatus: GitStatus | null = $state(null);
   loadingGitLog: boolean = $state(false);
+  loadingGitStatus: boolean = $state(false);
   refreshingRepo: string | null = $state(null);
   refreshingAll: boolean = $state(false);
   mergingRepo: string | null = $state(null);
@@ -17,10 +19,16 @@ class AppState {
   showMergeConflict: boolean = $state(false);
   errorMsg: string | null = $state(null);
   showError: boolean = $state(false);
+  notification: { type: 'success' | 'error'; message: string } | null = $state(null);
 
   dismissError() {
     this.errorMsg = null;
     this.showError = false;
+  }
+
+  showNotification(type: 'success' | 'error', message: string) {
+    this.notification = { type, message };
+    setTimeout(() => { this.notification = null; }, 4000);
   }
 
   async loadAll() {
@@ -179,7 +187,126 @@ class AppState {
         this.selectedRepo = { ...this.selectedRepo, default_branch: branch };
       }
     } catch (e) {
-      console.error('Failed to save default branch:', e);
+      this.showNotification('error', `Failed to save branch: ${e}`);
+    }
+  }
+
+  async loadGitStatus(id: string) {
+    this.loadingGitStatus = true;
+    try {
+      this.gitStatus = await api.getGitStatus(id);
+    } catch (e) {
+      console.error('Failed to load git status:', e);
+      this.gitStatus = null;
+    } finally {
+      this.loadingGitStatus = false;
+    }
+  }
+
+  async stageFile(id: string, file: string) {
+    try {
+      await api.stageFile(id, file);
+      await this.loadGitStatus(id);
+    } catch (e) {
+      this.showNotification('error', `Stage failed: ${e}`);
+    }
+  }
+
+  async unstageFile(id: string, file: string) {
+    try {
+      await api.unstageFile(id, file);
+      await this.loadGitStatus(id);
+    } catch (e) {
+      this.showNotification('error', `Unstage failed: ${e}`);
+    }
+  }
+
+  async stageAll(id: string) {
+    try {
+      await api.stageAll(id);
+      await this.loadGitStatus(id);
+    } catch (e) {
+      this.showNotification('error', `Stage all failed: ${e}`);
+    }
+  }
+
+  async commit(id: string, message: string) {
+    try {
+      const result = await api.commit(id, message);
+      await this.refreshRepo(id);
+      await this.loadGitLog(id);
+      await this.loadGitStatus(id);
+      this.showNotification('success', `Committed ${result.hash || ''}`);
+    } catch (e) {
+      this.showNotification('error', `Commit failed: ${e}`);
+      throw e;
+    }
+  }
+
+  async pushRepo(id: string) {
+    try {
+      const result = await api.push(id);
+      await this.refreshRepo(id);
+      this.showNotification('success', result || 'Pushed successfully');
+    } catch (e) {
+      this.showNotification('error', `Push failed: ${e}`);
+    }
+  }
+
+  async switchBranch(id: string, branch: string) {
+    try {
+      await api.switchBranch(id, branch);
+      await this.refreshRepo(id);
+      await this.loadGitLog(id);
+      await this.loadGitStatus(id);
+      this.showNotification('success', `Switched to ${branch}`);
+    } catch (e) {
+      this.showNotification('error', `Switch failed: ${e}`);
+    }
+  }
+
+  async stashRepo(id: string) {
+    try {
+      await api.stash(id);
+      await this.refreshRepo(id);
+      await this.loadGitStatus(id);
+      this.showNotification('success', 'Changes stashed');
+    } catch (e) {
+      this.showNotification('error', `Stash failed: ${e}`);
+    }
+  }
+
+  async stashPopRepo(id: string) {
+    try {
+      await api.stashPop(id);
+      await this.refreshRepo(id);
+      await this.loadGitStatus(id);
+      this.showNotification('success', 'Stash popped');
+    } catch (e) {
+      this.showNotification('error', `Stash pop failed: ${e}`);
+    }
+  }
+
+  async resolveFileConflict(id: string, file: string, resolution: string) {
+    try {
+      await api.resolveConflict(id, file, resolution);
+      this.showNotification('success', `Resolved ${file} using ${resolution}`);
+    } catch (e) {
+      this.showNotification('error', `Resolution failed: ${e}`);
+    }
+  }
+
+  async continueMerge(id: string) {
+    try {
+      const result = await api.continueMerge(id);
+      this.showMergeConflict = false;
+      this.mergeResult = null;
+      await this.refreshRepo(id);
+      await this.loadGitLog(id);
+      await this.loadGitStatus(id);
+      this.showNotification('success', `Merge complete ${result.hash || ''}`);
+    } catch (e) {
+      this.showNotification('error', `Continue merge failed: ${e}`);
     }
   }
 }

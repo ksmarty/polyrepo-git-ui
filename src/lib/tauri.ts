@@ -20,6 +20,25 @@ export interface MergeConflict {
   status: 'both_modified' | 'both_added' | 'deleted_by_them' | 'deleted_by_us' | 'added_by_them' | 'added_by_us';
 }
 
+export interface FileItem {
+  path: string;
+  status: string;
+  change: string;
+}
+
+export interface GitStatus {
+  staged: FileItem[];
+  unstaged: FileItem[];
+  has_conflicts: boolean;
+  merge_in_progress: boolean;
+}
+
+export interface CommitResult {
+  success: boolean;
+  message: string;
+  hash: string | null;
+}
+
 export async function getRepos(): Promise<Repository[]> {
   return invoke('get_repos');
 }
@@ -106,4 +125,48 @@ export async function checkGitInstalled(): Promise<boolean> {
 
 export async function scanDirectoryForRepos(path: string): Promise<string[]> {
   return invoke('scan_directory_for_repos', { path });
+}
+
+export async function getGitStatus(id: string): Promise<GitStatus> {
+  return invoke('get_git_status', { id });
+}
+
+export async function stageFile(id: string, file: string): Promise<void> {
+  return invoke('stage_file', { id, file });
+}
+
+export async function unstageFile(id: string, file: string): Promise<void> {
+  return invoke('unstage_file', { id, file });
+}
+
+export async function stageAll(id: string): Promise<void> {
+  return invoke('stage_all', { id });
+}
+
+export async function commit(id: string, message: string): Promise<CommitResult> {
+  return invoke('commit', { id, message });
+}
+
+export async function push(id: string, force: boolean = false): Promise<string> {
+  return invoke('push', { id, force });
+}
+
+export async function switchBranch(id: string, branch: string): Promise<void> {
+  return invoke('switch_branch', { id, branch });
+}
+
+export async function stash(id: string): Promise<void> {
+  return invoke('stash', { id });
+}
+
+export async function stashPop(id: string): Promise<void> {
+  return invoke('stash_pop', { id });
+}
+
+export async function resolveConflict(id: string, file: string, resolution: string): Promise<void> {
+  return invoke('resolve_conflict', { id, file, resolution });
+}
+
+export async function continueMerge(id: string): Promise<CommitResult> {
+  return invoke('continue_merge', { id });
 }

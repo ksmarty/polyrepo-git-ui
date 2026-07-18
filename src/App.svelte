@@ -331,12 +331,12 @@
                     class:ahead={app.selectedRepo.sync_status.ahead > 0}
                     class:dirty={app.selectedRepo.sync_status.is_dirty}
                   >
-                    {#if app.selectedRepo.sync_status.is_dirty}
-                      Modified
-                    {:else if app.selectedRepo.sync_status.up_to_date}
-                      Up to date
+                    {#if app.selectedRepo.sync_status.behind > 0}
+                      {app.selectedRepo.sync_status.behind} behind
+                    {:else if app.selectedRepo.sync_status.is_dirty}
+                      Uncommitted changes
                     {:else}
-                      {app.selectedRepo.sync_status.behind} behind, {app.selectedRepo.sync_status.ahead} ahead
+                      Up to date
                     {/if}
                   </span>
                 {/if}
@@ -803,8 +803,8 @@
   }
 
   .sync-badge.behind {
-    background-color: rgba(249, 188, 96, 0.15);
-    color: var(--warning);
+    background-color: rgba(242, 95, 76, 0.15);
+    color: var(--danger);
   }
 
   .sync-badge.ahead {
@@ -922,8 +922,8 @@
   }
 
   .sync-badge.dirty {
-    background-color: rgba(242, 95, 76, 0.15);
-    color: var(--danger);
+    background-color: rgba(249, 188, 96, 0.15);
+    color: var(--warning);
   }
 
   .inline-edit {

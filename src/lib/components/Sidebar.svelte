@@ -62,9 +62,8 @@
 
   function getSyncClass(repo: Repository): string {
     if (!repo.sync_status) return 'unknown';
-    if (repo.sync_status.is_dirty) return 'dirty';
     if (repo.sync_status.behind > 0) return 'behind';
-    if (repo.sync_status.ahead > 0) return 'ahead';
+    if (repo.sync_status.is_dirty) return 'dirty';
     return 'up-to-date';
   }
 
@@ -818,9 +817,9 @@
   }
 
   .sync-dot.up-to-date { background-color: var(--success); }
-  .sync-dot.behind { background-color: var(--warning); }
+  .sync-dot.dirty { background-color: var(--warning); }
+  .sync-dot.behind { background-color: var(--danger); }
   .sync-dot.ahead { background-color: var(--info); }
-  .sync-dot.dirty { background-color: var(--danger); }
   .sync-dot.unknown { background-color: var(--text-secondary); }
 
   .repo-name {

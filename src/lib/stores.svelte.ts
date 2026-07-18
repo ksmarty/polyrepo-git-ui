@@ -92,7 +92,6 @@ class AppState {
     } catch (e) {
       this.errorMsg = `Fetch failed: ${e}`;
       this.showError = true;
-      throw e;
     }
   }
 
@@ -104,7 +103,6 @@ class AppState {
     } catch (e) {
       this.errorMsg = `Pull failed: ${e}`;
       this.showError = true;
-      throw e;
     }
   }
 

@@ -1239,9 +1239,6 @@
   }
 
   .git-history {
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid var(--border);
   }
 
   .section-title {
@@ -1666,9 +1663,6 @@
   }
 
   .file-changes {
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid var(--border);
   }
 
   .file-changes-split {

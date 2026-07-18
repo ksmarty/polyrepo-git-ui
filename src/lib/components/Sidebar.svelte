@@ -771,15 +771,16 @@
     align-items: center;
     gap: 8px;
     width: 100%;
-    padding: 5px 8px;
+    padding: 8px 10px;
     background: transparent;
     color: var(--text-secondary);
     text-align: left;
     border-radius: 6px;
     font-size: 13px;
-    cursor: grab;
+    cursor: pointer;
     transition: background-color 0.1s;
     border: 2px solid transparent;
+    min-height: 36px;
   }
 
   .repo-item:hover {

@@ -14,6 +14,13 @@ class AppState {
   mergingRepo: string | null = $state(null);
   mergeResult: MergeResult | null = $state(null);
   showMergeConflict: boolean = $state(false);
+  errorMsg: string | null = $state(null);
+  showError: boolean = $state(false);
+
+  dismissError() {
+    this.errorMsg = null;
+    this.showError = false;
+  }
 
   async loadAll() {
     try {
@@ -82,7 +89,9 @@ class AppState {
       await api.fetchRepo(id);
       await this.refreshRepo(id);
     } catch (e) {
-      console.error('Failed to fetch repo:', e);
+      this.errorMsg = `Fetch failed: ${e}`;
+      this.showError = true;
+      throw e;
     }
   }
 
@@ -92,7 +101,9 @@ class AppState {
       await this.refreshRepo(id);
       await this.loadGitLog(id);
     } catch (e) {
-      console.error('Failed to pull repo:', e);
+      this.errorMsg = `Pull failed: ${e}`;
+      this.showError = true;
+      throw e;
     }
   }
 

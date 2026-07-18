@@ -4,7 +4,7 @@
   import Settings from './lib/components/Settings.svelte';
   import { app } from './lib/stores.svelte';
   import type { Repository } from './lib/types';
-  import { FolderGit2, GitPullRequest, Settings as SettingsIcon, RefreshCw, Download, ExternalLink, GitMerge, History, AlertTriangle, X, Code, CircleDot, Info, ArrowDownToLine } from '@lucide/svelte';
+  import { FolderGit2, GitPullRequest, Settings as SettingsIcon, RefreshCw, Download, ExternalLink, GitMerge, History, AlertTriangle, X, Code, CircleDot, Info, ArrowDownToLine, MoreHorizontal, FolderOpen } from '@lucide/svelte';
 
   let activeTab: 'repos' | 'prs' | 'settings' = $state('repos');
   let expandedCommit: string | null = $state(null);
@@ -12,6 +12,7 @@
   let editingDefaultBranch: boolean = $state(false);
   let newDefaultBranch: string = $state('');
   let githubConnected: boolean = $state(false);
+  let showOpenMenu: boolean = $state(false);
 
   async function checkGitHubAuth() {
     try {
@@ -103,11 +104,21 @@
     app.loadAll();
   }
 
+  function handleClickOutside(e: MouseEvent) {
+    if (showOpenMenu) {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.open-menu-wrapper')) {
+        showOpenMenu = false;
+      }
+    }
+  }
+
   app.loadAll();
   checkGitHubAuth();
 </script>
 
-<div class="app">
+<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+<div class="app" onclick={handleClickOutside}>
   <header class="header">
     <h1 class="logo">
       <FolderGit2 size={20} />
@@ -203,32 +214,37 @@
                       <span>Merge</span>
                     </button>
                   {/if}
-                  <button
-                    class="action-btn"
-                    onclick={openInVSCode}
-                    title="Open in VS Code"
-                  >
-                    <Code size={14} />
-                    <span>VS Code</span>
-                  </button>
-                  <button
-                    class="action-btn"
-                    onclick={openInIntelliJ}
-                    title="Open in IntelliJ"
-                  >
-                    <CircleDot size={14} />
-                    <span>IntelliJ</span>
-                  </button>
-                  {#if getGitHubUrl(app.selectedRepo)}
+                  <div class="action-divider"></div>
+                  <div class="open-menu-wrapper">
                     <button
                       class="action-btn"
-                      onclick={openGitHub}
-                      title="Open on GitHub (current branch)"
+                      onclick={() => showOpenMenu = !showOpenMenu}
+                      title="Open in..."
                     >
-                      <ExternalLink size={14} />
-                      <span>GitHub</span>
+                      <FolderOpen size={14} />
+                      <span>Open</span>
+                      <MoreHorizontal size={12} />
                     </button>
-                  {/if}
+                    {#if showOpenMenu}
+                      <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+                      <div class="open-menu" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+                        <button class="menu-item" onclick={() => { openInVSCode(); showOpenMenu = false; }}>
+                          <Code size={14} />
+                          VS Code
+                        </button>
+                        <button class="menu-item" onclick={() => { openInIntelliJ(); showOpenMenu = false; }}>
+                          <CircleDot size={14} />
+                          IntelliJ
+                        </button>
+                        {#if getGitHubUrl(app.selectedRepo)}
+                          <button class="menu-item" onclick={() => { openGitHub(); showOpenMenu = false; }}>
+                            <ExternalLink size={14} />
+                            GitHub
+                          </button>
+                        {/if}
+                      </div>
+                    {/if}
+                  </div>
                   <button
                     class="icon-btn"
                     onclick={() => showRepoInfo = true}
@@ -437,6 +453,30 @@
         <button class="close-btn" onclick={() => app.showMergeConflict = false}>
           {app.mergeResult.success ? 'Done' : 'Close'}
         </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if app.showError && app.errorMsg}
+  <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+  <div class="modal-overlay" onclick={() => app.dismissError()} onkeydown={(e) => e.key === 'Escape' && app.dismissError()}>
+    <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+    <div class="modal-content" onclick={(e) => e.stopPropagation()} onkeydown={(e) => { if (e.key === 'Escape') { app.dismissError(); } else { e.stopPropagation(); } }}>
+      <div class="modal-header">
+        <h3>
+          <AlertTriangle size={18} />
+          Error
+        </h3>
+        <button class="modal-close" onclick={() => app.dismissError()}>
+          <X size={16} />
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="error-message">{app.errorMsg}</p>
+      </div>
+      <div class="modal-actions">
+        <button class="close-btn" onclick={() => app.dismissError()}>Close</button>
       </div>
     </div>
   </div>
@@ -1038,5 +1078,63 @@
   .close-btn:hover {
     background-color: var(--accent);
     color: white;
+  }
+
+  .action-divider {
+    width: 1px;
+    height: 24px;
+    background-color: var(--border);
+    margin: 0 4px;
+    align-self: center;
+  }
+
+  .open-menu-wrapper {
+    position: relative;
+  }
+
+  .open-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px;
+    min-width: 140px;
+    z-index: 50;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  }
+
+  .menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 6px;
+    text-align: left;
+  }
+
+  .menu-item:hover {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .error-message {
+    font-size: 13px;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: monospace;
+    background-color: var(--bg-tertiary);
+    padding: 12px;
+    border-radius: 8px;
+    max-height: 300px;
+    overflow-y: auto;
   }
 </style>

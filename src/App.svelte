@@ -1090,6 +1090,11 @@
 
   .open-menu-wrapper {
     position: relative;
+    display: flex;
+  }
+
+  .open-menu-wrapper .action-btn {
+    height: 100%;
   }
 
   .open-menu {

@@ -115,6 +115,8 @@ class AppState {
       this.mergeResult = result;
       if (result.conflicts && result.conflicts.length > 0) {
         this.showMergeConflict = true;
+      } else if (!result.success) {
+        this.showMergeConflict = true;
       } else {
         await this.refreshRepo(id);
         await this.loadGitLog(id);

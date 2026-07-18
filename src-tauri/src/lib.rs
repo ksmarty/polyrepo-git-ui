@@ -68,6 +68,11 @@ async fn refresh_repo(
         existing.local_branches = refreshed.local_branches;
         existing.current_branch = refreshed.current_branch;
         existing.sync_status = refreshed.sync_status;
+
+        // Auto-detect default branch if not set
+        if existing.default_branch.is_none() {
+            existing.default_branch = git::detect_default_branch(std::path::Path::new(&repo_path)).await;
+        }
     }
     config.save().map_err(|e| e.to_string())?;
     Ok(config.repos.iter().find(|r| r.id == id).cloned().ok_or("Repo not found".to_string())?)
@@ -373,7 +378,14 @@ async fn clone_repo(
             config.github_auth.token.clone(),
         )
     };
-    let repo = git::clone_repo(&url, &path, Some(&default_branch), token.as_deref()).await?;
+    let mut repo = git::clone_repo(&url, &path, Some(&default_branch), token.as_deref()).await?;
+
+    // Auto-detect default branch from the cloned repo
+    let detected_branch = git::detect_default_branch(std::path::Path::new(&path)).await;
+    if repo.default_branch.is_none() {
+        repo.default_branch = detected_branch;
+    }
+
     let mut config = state.config.lock().await;
     config.repos.push(repo.clone());
     config.save().map_err(|e| e.to_string())?;
@@ -576,6 +588,7 @@ pub fn run() {
             disconnect_github,
             scan_directory_for_repos,
             get_git_status,
+            get_file_diff,
             stage_file,
             unstage_file,
             stage_all,
@@ -598,6 +611,15 @@ async fn get_git_status(state: tauri::State<'_, AppState>, id: String) -> Result
         config.repos.iter().find(|r| r.id == id).map(|r| r.path.clone()).ok_or("Repo not found")?
     };
     git::get_git_status(&repo_path).await
+}
+
+#[tauri::command]
+async fn get_file_diff(state: tauri::State<'_, AppState>, id: String, file: String, staged: bool) -> Result<String, String> {
+    let repo_path = {
+        let config = state.config.lock().await;
+        config.repos.iter().find(|r| r.id == id).map(|r| r.path.clone()).ok_or("Repo not found")?
+    };
+    git::get_file_diff(&repo_path, &file, staged).await
 }
 
 #[tauri::command]

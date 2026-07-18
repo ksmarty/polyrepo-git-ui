@@ -137,6 +137,10 @@ export async function getGitStatus(id: string): Promise<GitStatus> {
   return invoke('get_git_status', { id });
 }
 
+export async function getFileDiff(id: string, file: string, staged: boolean): Promise<string> {
+  return invoke('get_file_diff', { id, file, staged });
+}
+
 export async function stageFile(id: string, file: string): Promise<void> {
   return invoke('stage_file', { id, file });
 }

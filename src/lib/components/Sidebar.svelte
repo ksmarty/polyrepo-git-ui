@@ -121,7 +121,9 @@
       dragClass: 'sortable-drag',
       forceFallback: true,
       fallbackClass: 'sortable-drag',
-      distance: 8,
+      distance: 15,
+      delay: 150,
+      delayOnTouchOnly: true,
       onEnd: async (evt: any) => {
         if (evt.oldIndex == null || evt.newIndex == null) return;
         const ids = getGroupSortIds();
@@ -154,8 +156,8 @@
       dragClass: 'sortable-drag',
       forceFallback: true,
       fallbackClass: 'sortable-drag',
-      distance: 3,
-      delay: 0,
+      distance: 12,
+      delay: 150,
       delayOnTouchOnly: true,
       onStart() {
         isDraggingRepo = true;

@@ -401,59 +401,79 @@
                       <span class="merge-tag">MERGING</span>
                     {/if}
                   </h3>
-                  {#if app.gitStatus.staged.length > 0}
-                    <div class="file-group">
-                      <span class="file-group-label">Staged</span>
-                      {#each app.gitStatus.staged as file (file.path)}
-                        <div class="file-row">
-                          <span class="file-change-tag staged">{file.change}</span>
-                          <span class="file-path">{file.path}</span>
-                          <button
-                            class="file-action-btn"
-                            onclick={() => app.unstageFile(app.selectedRepo!.id, file.path)}
-                            title="Unstage"
-                          >
-                            <X size={12} />
-                          </button>
-                        </div>
-                      {/each}
-                    </div>
-                  {/if}
-                  {#if app.gitStatus.unstaged.length > 0}
-                    <div class="file-group">
-                      <span class="file-group-label">Unstaged</span>
-                      {#each app.gitStatus.unstaged as file (file.path)}
-                        <div class="file-row">
-                          <span class="file-change-tag unstaged">{file.change}</span>
-                          <span class="file-path">{file.path}</span>
-                          {#if file.change === 'U'}
-                            <button
-                              class="file-action-btn accept"
-                              onclick={() => app.resolveFileConflict(app.selectedRepo!.id, file.path, 'ours')}
-                              title="Accept ours"
-                            >
-                              <CheckCircle size={12} />
-                            </button>
-                            <button
-                              class="file-action-btn accept"
-                              onclick={() => app.resolveFileConflict(app.selectedRepo!.id, file.path, 'theirs')}
-                              title="Accept theirs"
-                            >
-                              <XCircle size={12} />
-                            </button>
-                          {:else}
+                  <div class="file-changes-split">
+                    {#if app.gitStatus.staged.length > 0}
+                      <div class="file-group">
+                        <span class="file-group-label">Staged</span>
+                        {#each app.gitStatus.staged as file (file.path)}
+                          <div class="file-row clickable" onclick={() => app.loadDiff(app.selectedRepo!.id, file.path, true)}>
+                            <span class="file-change-tag staged">{file.change}</span>
+                            <span class="file-path">{file.path}</span>
                             <button
                               class="file-action-btn"
-                              onclick={() => app.stageFile(app.selectedRepo!.id, file.path)}
-                              title="Stage"
+                              onclick={(e) => { e.stopPropagation(); app.unstageFile(app.selectedRepo!.id, file.path); }}
+                              title="Unstage"
                             >
-                              <ArrowRightLeft size={12} />
+                              <X size={12} />
                             </button>
+                          </div>
+                          {#if app.diffFile === file.path}
+                            <div class="diff-viewer">
+                              {#if app.loadingDiff}
+                                <p class="loading-text">Loading diff...</p>
+                              {:else}
+                                <pre class="diff-content">{app.diffContent}</pre>
+                              {/if}
+                            </div>
                           {/if}
-                        </div>
-                      {/each}
-                    </div>
-                  {/if}
+                        {/each}
+                      </div>
+                    {/if}
+                    {#if app.gitStatus.unstaged.length > 0}
+                      <div class="file-group">
+                        <span class="file-group-label">Unstaged</span>
+                        {#each app.gitStatus.unstaged as file (file.path)}
+                          <div class="file-row clickable" onclick={() => app.loadDiff(app.selectedRepo!.id, file.path, false)}>
+                            <span class="file-change-tag unstaged">{file.change}</span>
+                            <span class="file-path">{file.path}</span>
+                            {#if file.change === 'U'}
+                              <button
+                                class="file-action-btn accept"
+                                onclick={(e) => { e.stopPropagation(); app.resolveFileConflict(app.selectedRepo!.id, file.path, 'ours'); }}
+                                title="Accept ours"
+                              >
+                                <CheckCircle size={12} />
+                              </button>
+                              <button
+                                class="file-action-btn accept"
+                                onclick={(e) => { e.stopPropagation(); app.resolveFileConflict(app.selectedRepo!.id, file.path, 'theirs'); }}
+                                title="Accept theirs"
+                              >
+                                <XCircle size={12} />
+                              </button>
+                            {:else}
+                              <button
+                                class="file-action-btn"
+                                onclick={(e) => { e.stopPropagation(); app.stageFile(app.selectedRepo!.id, file.path); }}
+                                title="Stage"
+                              >
+                                <ArrowRightLeft size={12} />
+                              </button>
+                            {/if}
+                          </div>
+                          {#if app.diffFile === file.path}
+                            <div class="diff-viewer">
+                              {#if app.loadingDiff}
+                                <p class="loading-text">Loading diff...</p>
+                              {:else}
+                                <pre class="diff-content">{app.diffContent}</pre>
+                              {/if}
+                            </div>
+                          {/if}
+                        {/each}
+                      </div>
+                    {/if}
+                  </div>
 
                   <div class="commit-area">
                     <div class="stage-all-actions">
@@ -1307,8 +1327,9 @@
     background-color: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: 12px;
-    width: 480px;
-    max-height: 80vh;
+    width: 90vw;
+    max-width: 700px;
+    max-height: 85vh;
     overflow: auto;
   }
 
@@ -1600,6 +1621,22 @@
     border-top: 1px solid var(--border);
   }
 
+  .file-changes-split {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  @media (min-width: 900px) {
+    .file-changes-split {
+      flex-direction: row;
+    }
+    .file-changes-split .file-group {
+      flex: 1;
+      min-width: 0;
+    }
+  }
+
   .merge-tag {
     background-color: rgba(249, 188, 96, 0.2);
     color: var(--warning);
@@ -1636,6 +1673,28 @@
 
   .file-row:hover {
     background-color: var(--bg-tertiary);
+  }
+
+  .file-row.clickable {
+    cursor: pointer;
+  }
+
+  .diff-viewer {
+    margin: 4px 0 8px 0;
+    padding: 8px;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow-x: auto;
+  }
+
+  .diff-content {
+    font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
+    font-size: 11px;
+    line-height: 1.4;
+    white-space: pre;
+    margin: 0;
+    color: var(--text-primary);
   }
 
   .file-change-tag {

@@ -14,6 +14,64 @@ pub async fn check_git_installed() -> Result<bool, String> {
     Ok(output.status.success())
 }
 
+/// Detect the default branch of a git repository.
+/// Tries: 1) local branch pointing to origin/HEAD, 2) common names (main, master, develop)
+pub async fn detect_default_branch(path: &Path) -> Option<String> {
+    // Try to get the default branch from origin/HEAD
+    let output = Command::new("git")
+        .args(["symbolic-ref", "refs/remotes/origin/HEAD", "--short"])
+        .current_dir(path)
+        .output()
+        .await
+        .ok()?;
+
+    if output.status.success() {
+        let ref_name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        // "origin/main" -> "main"
+        let branch = ref_name.strip_prefix("origin/").unwrap_or(&ref_name);
+        if !branch.is_empty() {
+            return Some(branch.to_string());
+        }
+    }
+
+    // Fallback: check which common branch exists
+    for candidate in &["main", "master", "develop", "dev"] {
+        let check = Command::new("git")
+            .args(["rev-parse", "--verify", candidate])
+            .current_dir(path)
+            .output()
+            .await;
+        if let Ok(out) = check {
+            if out.status.success() {
+                return Some(candidate.to_string());
+            }
+        }
+    }
+
+    // Fallback: check remote branches
+    let output = Command::new("git")
+        .args(["branch", "-r", "--list", "origin/main", "origin/master", "origin/develop"])
+        .current_dir(path)
+        .output()
+        .await
+        .ok()?;
+
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        if stdout.contains("origin/main") {
+            return Some("main".to_string());
+        }
+        if stdout.contains("origin/master") {
+            return Some("master".to_string());
+        }
+        if stdout.contains("origin/develop") {
+            return Some("develop".to_string());
+        }
+    }
+
+    None
+}
+
 pub async fn add_repo(
     path: &str,
     group_id: Option<&str>,
@@ -41,7 +99,14 @@ pub async fn add_repo(
 
     let current_branch = get_current_branch(path).await?;
     let local_branches = get_local_branches(path).await?;
-    let sync_status = get_sync_status(path, &current_branch, default_branch).await?;
+
+    // Auto-detect default branch if not provided
+    let effective_default_branch = match default_branch {
+        Some(branch) if !branch.is_empty() => Some(branch.to_string()),
+        _ => detect_default_branch(path).await,
+    };
+
+    let sync_status = get_sync_status(path, &current_branch, effective_default_branch.as_deref()).await?;
 
     Ok(Repository {
         id: uuid::Uuid::new_v4().to_string(),
@@ -50,7 +115,7 @@ pub async fn add_repo(
         remote_url,
         github_owner,
         github_repo,
-        default_branch: None,
+        default_branch: effective_default_branch,
         group_id: group_id.map(|s| s.to_string()),
         order: 0,
         local_branches,
@@ -81,7 +146,14 @@ pub async fn refresh_repo(
 
     let current_branch = get_current_branch(path).await?;
     let local_branches = get_local_branches(path).await?;
-    let sync_status = get_sync_status(path, &current_branch, default_branch).await?;
+
+    // Auto-detect default branch if not provided
+    let effective_default_branch = match default_branch {
+        Some(branch) if !branch.is_empty() => Some(branch.to_string()),
+        _ => detect_default_branch(path).await,
+    };
+
+    let sync_status = get_sync_status(path, &current_branch, effective_default_branch.as_deref()).await?;
 
     Ok(Repository {
         id: uuid::Uuid::new_v4().to_string(),
@@ -90,7 +162,7 @@ pub async fn refresh_repo(
         remote_url,
         github_owner,
         github_repo,
-        default_branch: None,
+        default_branch: effective_default_branch,
         group_id: None,
         order: 0,
         local_branches,
@@ -179,6 +251,58 @@ pub async fn get_git_status(path: &str) -> Result<GitStatus, String> {
         has_conflicts,
         merge_in_progress,
     })
+}
+
+/// Get the diff of a single file. If staged is true, shows staged diff; otherwise shows working tree diff.
+pub async fn get_file_diff(path: &str, file: &str, staged: bool) -> Result<String, String> {
+    let mut args = vec!["diff".to_string()];
+    if staged {
+        args.push("--cached".to_string());
+    }
+    args.push("--".to_string());
+    args.push(file.to_string());
+
+    let output = Command::new("git")
+        .args(&args)
+        .current_dir(path)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to execute git diff: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Git diff failed: {}", stderr));
+    }
+
+    let diff = String::from_utf8_lossy(&output.stdout).to_string();
+
+    // If no diff (file is unchanged or new), try to show the file content for new files
+    if diff.is_empty() {
+        // Check if it's an untracked new file
+        let status_output = Command::new("git")
+            .args(["status", "--porcelain", "--", file])
+            .current_dir(path)
+            .output()
+            .await
+            .ok();
+
+        if let Some(out) = status_output {
+            let status = String::from_utf8_lossy(&out.stdout);
+            if status.starts_with("??") || status.starts_with("A ") {
+                // New untracked or staged file — show the whole file as added
+                let content = tokio::fs::read_to_string(std::path::Path::new(path).join(file))
+                    .await
+                    .unwrap_or_default();
+                let mut result = String::new();
+                for line in content.lines() {
+                    result.push_str(&format!("+{}\n", line));
+                }
+                return Ok(result);
+            }
+        }
+    }
+
+    Ok(diff)
 }
 
 pub async fn stage_file(path: &str, file: &str) -> Result<(), String> {

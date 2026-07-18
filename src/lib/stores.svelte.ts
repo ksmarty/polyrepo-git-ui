@@ -20,6 +20,9 @@ class AppState {
   showMergeConflict: boolean = $state(false);
   pullResult: PullResult | null = $state(null);
   showPullStrategy: boolean = $state(false);
+  diffFile: string | null = $state(null);
+  diffContent: string = $state('');
+  loadingDiff: boolean = $state(false);
   errorMsg: string | null = $state(null);
   showError: boolean = $state(false);
   notification: { type: 'success' | 'error'; message: string } | null = $state(null);
@@ -218,6 +221,24 @@ class AppState {
       this.gitStatus = null;
     } finally {
       this.loadingGitStatus = false;
+    }
+  }
+
+  async loadDiff(id: string, file: string, staged: boolean) {
+    if (this.diffFile === file) {
+      // Toggle off if clicking same file
+      this.diffFile = null;
+      this.diffContent = '';
+      return;
+    }
+    this.loadingDiff = true;
+    this.diffFile = file;
+    try {
+      this.diffContent = await api.getFileDiff(id, file, staged);
+    } catch (e) {
+      this.diffContent = `Failed to load diff: ${e}`;
+    } finally {
+      this.loadingDiff = false;
     }
   }
 

@@ -4,7 +4,8 @@
   import Settings from './lib/components/Settings.svelte';
   import { app } from './lib/stores.svelte';
   import type { Repository } from './lib/types';
-  import { FolderGit2, GitPullRequest, Settings as SettingsIcon, RefreshCw, Download, ExternalLink, GitMerge, History, AlertTriangle, X, Code, CircleDot, Info, ArrowDownToLine, MoreHorizontal, FolderOpen, Upload, SquareStack, Check, ArrowRightLeft, CheckCircle, XCircle, ChevronDown, FileDiff } from '@lucide/svelte';
+  import type { MergeResult } from './lib/tauri';
+  import { FolderGit2, GitPullRequest, Settings as SettingsIcon, RefreshCw, Download, ExternalLink, GitMerge, GitBranch, History, AlertTriangle, X, Code, CircleDot, Info, ArrowDownToLine, MoreHorizontal, FolderOpen, Upload, SquareStack, Check, ArrowRightLeft, CheckCircle, XCircle, ChevronDown, FileDiff } from '@lucide/svelte';
 
   let activeTab: 'repos' | 'prs' | 'settings' = $state('repos');
   let expandedCommit: string | null = $state(null);
@@ -17,6 +18,7 @@
   let commitMessage: string = $state('');
   let committing: boolean = $state(false);
   let pushing: boolean = $state(false);
+  let mergeTargetBranch: string = $state('');
 
   async function checkGitHubAuth() {
     try {
@@ -142,6 +144,54 @@
     } finally {
       pushing = false;
     }
+  }
+
+  async function handleMergeTarget() {
+    if (!app.selectedRepo || !mergeTargetBranch.trim()) return;
+    app.showMergeConflict = false;
+    // Try to merge the specified branch
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const result = await invoke('merge_repo_with_target', {
+        id: app.selectedRepo.id,
+        target: mergeTargetBranch.trim()
+      }) as MergeResult;
+      app.mergeResult = result;
+      if (result.success) {
+        app.showNotification('success', `Merged ${mergeTargetBranch} successfully`);
+        await app.refreshRepo(app.selectedRepo.id);
+        await app.loadGitLog(app.selectedRepo.id);
+      } else {
+        app.showMergeConflict = true;
+      }
+    } catch (e) {
+      app.mergeResult = { success: false, message: String(e) };
+      app.showMergeConflict = true;
+    }
+    mergeTargetBranch = '';
+  }
+
+  async function handlePullInstead() {
+    if (!app.selectedRepo) return;
+    app.showMergeConflict = false;
+    await app.pullRepo(app.selectedRepo.id);
+  }
+
+  async function handleStashAndMerge() {
+    if (!app.selectedRepo) return;
+    try {
+      await app.stashRepo(app.selectedRepo.id);
+      app.showMergeConflict = false;
+      await app.mergeRepo(app.selectedRepo.id);
+    } catch (e) {
+      app.showNotification('error', `Stash failed: ${e}`);
+    }
+  }
+
+  async function handlePullStrategy(rebase: boolean) {
+    if (!app.selectedRepo) return;
+    app.showPullStrategy = false;
+    await app.pullRepo(app.selectedRepo.id, rebase);
   }
 
   app.loadAll();
@@ -618,6 +668,51 @@
           <div class="merge-error-box">
             <pre>{app.mergeResult.message}</pre>
           </div>
+          {#if app.mergeResult.message.includes('not something we can merge')}
+            <div class="merge-options">
+              <p>The target branch doesn't exist or can't be merged. Try:</p>
+              <div class="merge-option-actions">
+                <div class="merge-option-row">
+                  <input
+                    class="merge-target-input"
+                    type="text"
+                    bind:value={mergeTargetBranch}
+                    placeholder="branch name (e.g. develop)"
+                  />
+                  <button
+                    class="merge-option-btn"
+                    onclick={() => handleMergeTarget()}
+                    disabled={!mergeTargetBranch.trim()}
+                  >
+                    Merge Branch
+                  </button>
+                </div>
+                <button class="merge-option-btn secondary" onclick={() => handlePullInstead()}>
+                  <ArrowDownToLine size={14} />
+                  Pull Instead
+                </button>
+              </div>
+            </div>
+          {:else if app.mergeResult.message.includes('uncommitted changes')}
+            <div class="merge-options">
+              <p>You have uncommitted changes. Resolve them first:</p>
+              <div class="merge-option-actions">
+                <button class="merge-option-btn" onclick={() => handleStashAndMerge()}>
+                  <SquareStack size={14} />
+                  Stash & Merge
+                </button>
+              </div>
+            </div>
+          {:else}
+            <div class="merge-options">
+              <div class="merge-option-actions">
+                <button class="merge-option-btn secondary" onclick={() => handlePullInstead()}>
+                  <ArrowDownToLine size={14} />
+                  Pull Instead
+                </button>
+              </div>
+            </div>
+          {/if}
         {:else}
           <p class="merge-message">{app.mergeResult.message}</p>
         {/if}
@@ -685,6 +780,49 @@
       </div>
       <div class="modal-actions">
         <button class="close-btn" onclick={() => app.dismissError()}>Close</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if app.showPullStrategy && app.pullResult}
+  <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+  <div class="modal-overlay" onclick={() => app.showPullStrategy = false} onkeydown={(e) => e.key === 'Escape' && (app.showPullStrategy = false)}>
+    <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+    <div class="modal-content" onclick={(e) => e.stopPropagation()} onkeydown={(e) => { if (e.key === 'Escape') { app.showPullStrategy = false; } else { e.stopPropagation(); } }}>
+      <div class="modal-header">
+        <h3>
+          <AlertTriangle size={18} />
+          Divergent Branches
+        </h3>
+        <button class="modal-close" onclick={() => app.showPullStrategy = false}>
+          <X size={16} />
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="merge-error-box">
+          <pre>{app.pullResult.message}</pre>
+        </div>
+        <p class="merge-options-title">Choose a pull strategy:</p>
+        <div class="pull-strategy-options">
+          <button class="strategy-btn" onclick={() => handlePullStrategy(false)}>
+            <GitMerge size={16} />
+            <div class="strategy-info">
+              <span class="strategy-name">Merge</span>
+              <span class="strategy-desc">Create a merge commit</span>
+            </div>
+          </button>
+          <button class="strategy-btn" onclick={() => handlePullStrategy(true)}>
+            <GitBranch size={16} />
+            <div class="strategy-info">
+              <span class="strategy-name">Rebase</span>
+              <span class="strategy-desc">Replay commits on top</span>
+            </div>
+          </button>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="close-btn" onclick={() => app.showPullStrategy = false}>Cancel</button>
       </div>
     </div>
   </div>
@@ -1665,5 +1803,119 @@
   .conflict-resolve-btn.theirs:hover {
     background-color: var(--warning);
     color: white;
+  }
+
+  .merge-options {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  .merge-options p {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin-bottom: 10px;
+  }
+
+  .merge-option-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .merge-option-row {
+    display: flex;
+    gap: 6px;
+  }
+
+  .merge-target-input {
+    flex: 1;
+    padding: 6px 10px;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+  }
+
+  .merge-target-input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .merge-option-btn {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background-color: var(--accent);
+    color: white;
+  }
+
+  .merge-option-btn:hover {
+    opacity: 0.9;
+  }
+
+  .merge-option-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .merge-option-btn.secondary {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .merge-option-btn.secondary:hover {
+    background-color: var(--border);
+  }
+
+  .merge-options-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 10px;
+  }
+
+  .pull-strategy-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .strategy-btn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .strategy-btn:hover {
+    border-color: var(--accent);
+    background-color: var(--bg-secondary);
+  }
+
+  .strategy-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .strategy-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 14px;
+  }
+
+  .strategy-desc {
+    color: var(--text-secondary);
+    font-size: 12px;
   }
 </style>

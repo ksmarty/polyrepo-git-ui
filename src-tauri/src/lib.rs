@@ -122,7 +122,7 @@ async fn pull_repo(
     state: tauri::State<'_, AppState>,
     id: String,
     rebase: bool,
-) -> Result<(), String> {
+) -> Result<git::PullResult, String> {
     let repo_path = {
         let config = state.config.lock().await;
         config
@@ -155,6 +155,24 @@ async fn merge_repo(
     };
     let effective_default_branch = repo_default_branch.as_deref().or(Some(global_default_branch.as_str()));
     git::merge_repo(&repo_path, effective_default_branch).await
+}
+
+#[tauri::command]
+async fn merge_repo_with_target(
+    state: tauri::State<'_, AppState>,
+    id: String,
+    target: String,
+) -> Result<git::MergeResult, String> {
+    let repo_path = {
+        let config = state.config.lock().await;
+        config
+            .repos
+            .iter()
+            .find(|r| r.id == id)
+            .map(|r| r.path.clone())
+            .ok_or("Repo not found")?
+    };
+    git::merge_repo_with_target(&repo_path, &target).await
 }
 
 #[tauri::command]
@@ -535,6 +553,7 @@ pub fn run() {
             fetch_repo,
             pull_repo,
             merge_repo,
+            merge_repo_with_target,
             abort_merge,
             get_git_log,
             get_groups,

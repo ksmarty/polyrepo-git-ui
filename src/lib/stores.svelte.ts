@@ -1,5 +1,5 @@
 import type { Repository, RepoGroup, AppConfig } from './types';
-import type { GitLogEntry, MergeResult, GitStatus } from './tauri';
+import type { GitLogEntry, MergeResult, GitStatus, PullResult } from './tauri';
 import * as api from './tauri';
 
 class AppState {
@@ -15,8 +15,11 @@ class AppState {
   refreshingAll: boolean = $state(false);
   mergingRepo: string | null = $state(null);
   fetchingRepo: string | null = $state(null);
+  pullingRepo: string | null = $state(null);
   mergeResult: MergeResult | null = $state(null);
   showMergeConflict: boolean = $state(false);
+  pullResult: PullResult | null = $state(null);
+  showPullStrategy: boolean = $state(false);
   errorMsg: string | null = $state(null);
   showError: boolean = $state(false);
   notification: { type: 'success' | 'error'; message: string } | null = $state(null);
@@ -113,13 +116,26 @@ class AppState {
   }
 
   async pullRepo(id: string, rebase: boolean = false) {
+    this.pullingRepo = id;
     try {
-      await api.pullRepo(id, rebase);
-      await this.refreshRepo(id);
-      await this.loadGitLog(id);
+      const result = await api.pullRepo(id, rebase);
+      if (result.success) {
+        this.showNotification('success', 'Pull successful');
+        await this.refreshRepo(id);
+        await this.loadGitLog(id);
+      } else if (result.needs_rebase) {
+        // Divergent branches — show strategy modal.
+        this.pullResult = result;
+        this.showPullStrategy = true;
+      } else {
+        this.errorMsg = `Pull failed: ${result.message}`;
+        this.showError = true;
+      }
     } catch (e) {
       this.errorMsg = `Pull failed: ${e}`;
       this.showError = true;
+    } finally {
+      this.pullingRepo = null;
     }
   }
 
@@ -134,6 +150,7 @@ class AppState {
       } else if (!result.success) {
         this.showMergeConflict = true;
       } else {
+        this.showNotification('success', result.message);
         await this.refreshRepo(id);
         await this.loadGitLog(id);
       }

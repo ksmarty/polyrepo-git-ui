@@ -39,6 +39,12 @@ export interface CommitResult {
   hash: string | null;
 }
 
+export interface PullResult {
+  success: boolean;
+  message: string;
+  needs_rebase: boolean;
+}
+
 export async function getRepos(): Promise<Repository[]> {
   return invoke('get_repos');
 }
@@ -59,7 +65,7 @@ export async function fetchRepo(id: string): Promise<void> {
   return invoke('fetch_repo', { id });
 }
 
-export async function pullRepo(id: string, rebase: boolean): Promise<void> {
+export async function pullRepo(id: string, rebase: boolean): Promise<PullResult> {
   return invoke('pull_repo', { id, rebase });
 }
 

@@ -427,7 +427,14 @@ pub async fn fetch_repo(path: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub async fn pull_repo(path: &str, rebase: bool) -> Result<(), String> {
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PullResult {
+    pub success: bool,
+    pub message: String,
+    pub needs_rebase: bool,
+}
+
+pub async fn pull_repo(path: &str, rebase: bool) -> Result<PullResult, String> {
     let mut args = vec!["pull".to_string()];
     if rebase {
         args.push("--rebase".to_string());
@@ -440,12 +447,27 @@ pub async fn pull_repo(path: &str, rebase: bool) -> Result<(), String> {
         .await
         .map_err(|e| format!("Failed to execute git pull: {}", e))?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Git pull failed: {}", stderr));
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        return Ok(PullResult {
+            success: true,
+            message: if stdout.is_empty() { "Already up to date".to_string() } else { stdout },
+            needs_rebase: false,
+        });
     }
 
-    Ok(())
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    // Divergent branches — user needs to choose a strategy.
+    if stderr.contains("divergent branches") || stderr.contains("need to specify how to reconcile") {
+        return Ok(PullResult {
+            success: false,
+            message: stderr.trim().to_string(),
+            needs_rebase: true,
+        });
+    }
+
+    Err(format!("Git pull failed: {}", stderr))
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -510,6 +532,24 @@ pub async fn merge_repo(path: &str, default_branch: Option<&str>) -> Result<Merg
             });
         }
 
+        // Check for "not something we can merge" — branch doesn't exist or already up to date.
+        if stderr.contains("not something we can merge") || stderr.contains("Already up to date") {
+            return Ok(MergeResult {
+                success: false,
+                message: format!("Cannot merge '{}': {}", target, stderr.trim()),
+                conflicts: None,
+            });
+        }
+
+        // Check for divergent branches during merge (uncommitted changes).
+        if stderr.contains("uncommitted changes") || stderr.contains("Changes to be committed") {
+            return Ok(MergeResult {
+                success: false,
+                message: format!("Cannot merge: you have uncommitted changes. Stash or commit them first.\n\n{}", stderr.trim()),
+                conflicts: None,
+            });
+        }
+
         // Other error.
         return Ok(MergeResult {
             success: false,
@@ -519,6 +559,43 @@ pub async fn merge_repo(path: &str, default_branch: Option<&str>) -> Result<Merg
     }
 
     Err("No valid merge target found".to_string())
+}
+
+pub async fn merge_repo_with_target(path: &str, target: &str) -> Result<MergeResult, String> {
+    let output = Command::new("git")
+        .args(["merge", target])
+        .current_dir(path)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to execute git merge: {}", e))?;
+
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        return Ok(MergeResult {
+            success: true,
+            message: if stdout.is_empty() { "Already up to date".to_string() } else { stdout },
+            conflicts: None,
+        });
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    // Check for merge conflicts.
+    if stderr.contains("CONFLICT") || stderr.contains("Automatic merge failed") {
+        let conflicts = get_merge_conflicts(path).await;
+        return Ok(MergeResult {
+            success: false,
+            message: stderr.trim().to_string(),
+            conflicts: Some(conflicts),
+        });
+    }
+
+    // Other error.
+    Ok(MergeResult {
+        success: false,
+        message: stderr.trim().to_string(),
+        conflicts: None,
+    })
 }
 
 async fn get_merge_conflicts(path: &str) -> Vec<MergeConflict> {

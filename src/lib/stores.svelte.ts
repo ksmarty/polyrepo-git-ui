@@ -48,6 +48,7 @@ class AppState {
   }
 
   async selectRepo(repo: Repository) {
+    if (this.selectedRepo?.id === repo.id) return;
     this.selectedRepo = repo;
     await this.refreshRepo(repo.id);
     await this.loadGitLog(repo.id);

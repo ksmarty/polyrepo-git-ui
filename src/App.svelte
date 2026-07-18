@@ -423,14 +423,26 @@
       <div class="modal-header">
         <h3>
           <AlertTriangle size={18} />
-          {app.mergeResult.success ? 'Merge Successful' : 'Merge Conflict'}
+          {#if app.mergeResult.success}
+            Merge Successful
+          {:else if app.mergeResult.conflicts && app.mergeResult.conflicts.length > 0}
+            Merge Conflict
+          {:else}
+            Merge Failed
+          {/if}
         </h3>
         <button class="modal-close" onclick={() => app.showMergeConflict = false}>
           <X size={16} />
         </button>
       </div>
       <div class="modal-body">
-        <p class="merge-message">{app.mergeResult.message}</p>
+        {#if !app.mergeResult.success}
+          <div class="merge-error-box">
+            <pre>{app.mergeResult.message}</pre>
+          </div>
+        {:else}
+          <p class="merge-message">{app.mergeResult.message}</p>
+        {/if}
         {#if app.mergeResult.conflicts && app.mergeResult.conflicts.length > 0}
           <div class="conflict-list">
             <p class="conflict-title">Conflicting files:</p>
@@ -1005,6 +1017,25 @@
     margin-bottom: 12px;
     white-space: pre-wrap;
     font-family: monospace;
+  }
+
+  .merge-error-box {
+    background-color: rgba(242, 95, 76, 0.08);
+    border: 1px solid rgba(242, 95, 76, 0.3);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+    overflow-x: auto;
+  }
+
+  .merge-error-box pre {
+    margin: 0;
+    font-size: 12px;
+    color: var(--danger);
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: monospace;
+    line-height: 1.5;
   }
 
   .conflict-list {

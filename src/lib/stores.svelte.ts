@@ -12,6 +12,7 @@ class AppState {
   refreshingRepo: string | null = $state(null);
   refreshingAll: boolean = $state(false);
   mergingRepo: string | null = $state(null);
+  fetchingRepo: string | null = $state(null);
   mergeResult: MergeResult | null = $state(null);
   showMergeConflict: boolean = $state(false);
   errorMsg: string | null = $state(null);
@@ -86,6 +87,7 @@ class AppState {
   }
 
   async fetchRepo(id: string) {
+    this.fetchingRepo = id;
     try {
       console.log('[polyrepo] fetchRepo start', id);
       await api.fetchRepo(id);
@@ -96,6 +98,8 @@ class AppState {
       console.error('[polyrepo] fetchRepo error', e);
       this.errorMsg = `Fetch failed: ${e}`;
       this.showError = true;
+    } finally {
+      this.fetchingRepo = null;
     }
   }
 

@@ -190,9 +190,10 @@
                   <button
                     class="action-btn"
                     onclick={() => app.fetchRepo(app.selectedRepo!.id)}
+                    disabled={app.fetchingRepo === app.selectedRepo.id}
                     title="Fetch from remote"
                   >
-                    <Download size={14} />
+                    <Download size={14} class={app.fetchingRepo === app.selectedRepo.id ? 'spin' : ''} />
                     <span>Fetch</span>
                   </button>
                   <button

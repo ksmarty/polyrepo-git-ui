@@ -99,6 +99,7 @@ pub async fn add_repo(
 
     let current_branch = get_current_branch(path).await?;
     let local_branches = get_local_branches(path).await?;
+    let remote_branches = get_remote_branches(path).await?;
 
     // Auto-detect default branch if not provided
     let effective_default_branch = match default_branch {
@@ -119,6 +120,7 @@ pub async fn add_repo(
         group_id: group_id.map(|s| s.to_string()),
         order: 0,
         local_branches,
+        remote_branches,
         current_branch,
         sync_status: Some(sync_status),
     })
@@ -146,6 +148,7 @@ pub async fn refresh_repo(
 
     let current_branch = get_current_branch(path).await?;
     let local_branches = get_local_branches(path).await?;
+    let remote_branches = get_remote_branches(path).await?;
 
     // Auto-detect default branch if not provided
     let effective_default_branch = match default_branch {
@@ -166,6 +169,7 @@ pub async fn refresh_repo(
         group_id: None,
         order: 0,
         local_branches,
+        remote_branches,
         current_branch,
         sync_status: Some(sync_status),
     })
@@ -289,11 +293,17 @@ pub async fn get_file_diff(path: &str, file: &str, staged: bool) -> Result<Strin
         if let Some(out) = status_output {
             let status = String::from_utf8_lossy(&out.stdout);
             if status.starts_with("??") || status.starts_with("A ") {
-                // New untracked or staged file — show the whole file as added
+                // New untracked or staged file — construct a valid git diff
                 let content = tokio::fs::read_to_string(std::path::Path::new(path).join(file))
                     .await
                     .unwrap_or_default();
-                let mut result = String::new();
+                let line_count = content.lines().count().max(1);
+                let mut result = format!("diff --git a/{} b/{}\n", file, file);
+                result.push_str("new file mode 100644\n");
+                result.push_str("index 0000000..0000000\n");
+                result.push_str("--- /dev/null\n");
+                result.push_str(&format!("+++ b/{}\n", file));
+                result.push_str(&format!("@@ -0,{} +1,{} @@\n", 0, line_count));
                 for line in content.lines() {
                     result.push_str(&format!("+{}\n", line));
                 }
@@ -418,16 +428,79 @@ pub async fn push(path: &str, force: bool) -> Result<String, String> {
 }
 
 pub async fn switch_branch(path: &str, branch: &str) -> Result<(), String> {
-    let output = Command::new("git")
-        .args(["switch", branch])
+    // Check if branch exists locally
+    let local_check = Command::new("git")
+        .args(["rev-parse", "--verify", branch])
         .current_dir(path)
         .output()
         .await
-        .map_err(|e| format!("Failed to execute git switch: {}", e))?;
+        .map_err(|e| format!("Failed to execute git rev-parse: {}", e))?;
+
+    let output = if local_check.status.success() {
+        // Local branch exists, just switch
+        Command::new("git")
+            .args(["switch", branch])
+            .current_dir(path)
+            .output()
+            .await
+            .map_err(|e| format!("Failed to execute git switch: {}", e))?
+    } else {
+        // Try as remote branch - create local tracking branch
+        let remote_branch = format!("origin/{}", branch);
+        let remote_check = Command::new("git")
+            .args(["rev-parse", "--verify", &remote_branch])
+            .current_dir(path)
+            .output()
+            .await
+            .map_err(|e| format!("Failed to execute git rev-parse: {}", e))?;
+
+        if !remote_check.status.success() {
+            return Err(format!("Branch '{}' not found locally or on origin", branch));
+        }
+        Command::new("git")
+            .args(["switch", "--track", branch, &remote_branch])
+            .current_dir(path)
+            .output()
+            .await
+            .map_err(|e| format!("Failed to execute git switch: {}", e))?
+    };
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(format!("Switch failed: {}", stderr));
+    }
+    Ok(())
+}
+
+pub async fn discard_file(path: &str, file_path: &str) -> Result<(), String> {
+    // First, try to unstage if staged
+    let _ = Command::new("git")
+        .args(["restore", "--staged", file_path])
+        .current_dir(path)
+        .output()
+        .await;
+
+    // Then discard working tree changes
+    let output = Command::new("git")
+        .args(["checkout", "--", file_path])
+        .current_dir(path)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to execute git checkout: {}", e))?;
+
+    if !output.status.success() {
+        // Try alternative for untracked files - just remove them
+        let rm_output = Command::new("git")
+            .args(["clean", "-f", file_path])
+            .current_dir(path)
+            .output()
+            .await
+            .map_err(|e| format!("Failed to execute git clean: {}", e))?;
+
+        if !rm_output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("Discard failed: {}", stderr));
+        }
     }
     Ok(())
 }
@@ -893,6 +966,30 @@ async fn get_local_branches(path: &Path) -> Result<Vec<String>, String> {
             .lines()
             .map(|b| b.trim().to_string())
             .filter(|b| !b.is_empty())
+            .collect();
+        Ok(branches)
+    } else {
+        Ok(Vec::new())
+    }
+}
+
+async fn get_remote_branches(path: &Path) -> Result<Vec<String>, String> {
+    let output = Command::new("git")
+        .args(["branch", "-r", "--format=%(refname:short)"])
+        .current_dir(path)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to execute git branch -r: {}", e))?;
+
+    if output.status.success() {
+        let branches = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(|b| b.trim().to_string())
+            .filter(|b| !b.is_empty() && !b.contains("HEAD"))
+            .map(|b| {
+                // Strip "origin/" prefix if present
+                b.strip_prefix("origin/").unwrap_or(&b).to_string()
+            })
             .collect();
         Ok(branches)
     } else {

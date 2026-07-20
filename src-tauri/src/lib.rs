@@ -66,6 +66,7 @@ async fn refresh_repo(
         existing.github_owner = refreshed.github_owner;
         existing.github_repo = refreshed.github_repo;
         existing.local_branches = refreshed.local_branches;
+        existing.remote_branches = refreshed.remote_branches;
         existing.current_branch = refreshed.current_branch;
         existing.sync_status = refreshed.sync_status;
 
@@ -595,6 +596,7 @@ pub fn run() {
             commit,
             push,
             switch_branch,
+            discard_file,
             stash,
             stash_pop,
             resolve_conflict,
@@ -674,6 +676,15 @@ async fn switch_branch(state: tauri::State<'_, AppState>, id: String, branch: St
         config.repos.iter().find(|r| r.id == id).map(|r| r.path.clone()).ok_or("Repo not found")?
     };
     git::switch_branch(&repo_path, &branch).await
+}
+
+#[tauri::command]
+async fn discard_file(state: tauri::State<'_, AppState>, id: String, file_path: String) -> Result<(), String> {
+    let repo_path = {
+        let config = state.config.lock().await;
+        config.repos.iter().find(|r| r.id == id).map(|r| r.path.clone()).ok_or("Repo not found")?
+    };
+    git::discard_file(&repo_path, &file_path).await
 }
 
 #[tauri::command]

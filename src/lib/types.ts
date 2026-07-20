@@ -16,6 +16,7 @@ export interface Repository {
   group_id: string | null;
   order: number;
   local_branches: string[];
+  remote_branches: string[];
   current_branch: string;
   sync_status: SyncStatus | null;
 }

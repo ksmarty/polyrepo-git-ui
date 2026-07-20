@@ -212,7 +212,8 @@
     background-color: var(--bg-primary);
     border: 1px solid var(--border);
     border-radius: 14px;
-    width: 540px;
+    width: 80vw;
+    max-width: 700px;
     max-height: 80vh;
     display: flex;
     flex-direction: column;

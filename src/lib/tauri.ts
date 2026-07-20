@@ -165,6 +165,10 @@ export async function switchBranch(id: string, branch: string): Promise<void> {
   return invoke('switch_branch', { id, branch });
 }
 
+export async function discardFile(id: string, filePath: string): Promise<void> {
+  return invoke('discard_file', { id, filePath });
+}
+
 export async function stash(id: string): Promise<void> {
   return invoke('stash', { id });
 }

@@ -5,6 +5,8 @@
   import { app } from './lib/stores.svelte';
   import type { Repository } from './lib/types';
   import type { MergeResult } from './lib/tauri';
+  import { DiffView, DiffModeEnum } from '@git-diff-view/svelte';
+  import '@git-diff-view/svelte/styles/diff-view-pure.css';
   import { FolderGit2, GitPullRequest, Settings as SettingsIcon, RefreshCw, Download, ExternalLink, GitMerge, GitBranch, History, AlertTriangle, X, Code, CircleDot, Info, ArrowDownToLine, MoreHorizontal, FolderOpen, Upload, SquareStack, Check, ArrowRightLeft, CheckCircle, XCircle, ChevronDown, FileDiff } from '@lucide/svelte';
 
   let activeTab: 'repos' | 'prs' | 'settings' = $state('repos');
@@ -20,6 +22,28 @@
   let pushing: boolean = $state(false);
   let mergeTargetBranch: string = $state('');
   let showDiffModal: boolean = $state(false);
+  let diffViewMode: 'split' | 'unified' = $state('split');
+
+  function parseDiffContent(rawDiff: string) {
+    if (!rawDiff) return null;
+    
+    let oldFileName = '';
+    let newFileName = '';
+    
+    const diffMatch = rawDiff.match(/diff --git a\/(.+?) b\/(.+)/);
+    if (diffMatch) {
+      oldFileName = diffMatch[1];
+      newFileName = diffMatch[2];
+    }
+    
+    return {
+      oldFile: { fileName: oldFileName || app.diffFile || 'file' },
+      newFile: { fileName: newFileName || app.diffFile || 'file' },
+      hunks: [rawDiff]
+    };
+  }
+
+  let parsedDiff = $derived(parseDiffContent(app.diffContent));
 
   async function checkGitHubAuth() {
     try {
@@ -360,18 +384,45 @@
                     </button>
                     {#if showBranchMenu}
                       <div class="branch-menu" onclick={(e) => e.stopPropagation()}>
-                        {#each app.selectedRepo.local_branches as br}
-                          <button
-                            class="branch-menu-item"
-                            class:active={br === app.selectedRepo.current_branch}
-                            onclick={() => { app.switchBranch(app.selectedRepo!.id, br); showBranchMenu = false; }}
-                          >
-                            {br}
-                            {#if br === app.selectedRepo.current_branch}
-                              <Check size={12} />
-                            {/if}
-                          </button>
-                        {/each}
+                        {#if app.selectedRepo.local_branches.length > 0}
+                          <div class="branch-section-label">
+                            <span class="section-icon">L</span>
+                            Local
+                          </div>
+                          {#each app.selectedRepo.local_branches as br}
+                            <button
+                              class="branch-menu-item"
+                              class:active={br === app.selectedRepo.current_branch}
+                              onclick={() => { app.switchBranch(app.selectedRepo!.id, br); showBranchMenu = false; }}
+                            >
+                              <span class="branch-name">{br}</span>
+                              {#if br === app.selectedRepo.current_branch}
+                                <Check size={12} />
+                              {/if}
+                            </button>
+                          {/each}
+                        {/if}
+                        {#if app.selectedRepo.remote_branches.length > 0}
+                          <div class="branch-section-label remote-section">
+                            <span class="section-icon">R</span>
+                            Remote
+                          </div>
+                          {#each app.selectedRepo.remote_branches as br}
+                            {@const isLocal = app.selectedRepo.local_branches.includes(br)}
+                            <button
+                              class="branch-menu-item remote-item"
+                              class:active={!isLocal && br === app.selectedRepo.current_branch}
+                              onclick={() => { app.switchBranch(app.selectedRepo!.id, br); showBranchMenu = false; }}
+                            >
+                              <span class="branch-name">{br}</span>
+                              {#if isLocal}
+                                <span class="branch-tag local-tag">local</span>
+                              {:else if br === app.selectedRepo.current_branch}
+                                <Check size={12} />
+                              {/if}
+                            </button>
+                          {/each}
+                        {/if}
                       </div>
                     {/if}
                   </div>
@@ -435,6 +486,13 @@
                                   title="Stage"
                                 >
                                   <ArrowRightLeft size={12} />
+                                </button>
+                                <button
+                                  class="file-action-btn danger"
+                                  onclick={(e) => { e.stopPropagation(); app.discardFile(app.selectedRepo!.id, file.path); }}
+                                  title="Discard changes"
+                                >
+                                  <X size={12} />
                                 </button>
                               {/if}
                             </div>
@@ -847,6 +905,22 @@
           <FileDiff size={18} />
           {app.diffStaged ? 'Staged' : 'Unstaged'}: {app.diffFile}
         </h3>
+        <div class="diff-view-controls">
+          <button 
+            class="diff-mode-btn" 
+            class:active={diffViewMode === 'split'}
+            onclick={() => diffViewMode = 'split'}
+          >
+            Split
+          </button>
+          <button 
+            class="diff-mode-btn" 
+            class:active={diffViewMode === 'unified'}
+            onclick={() => diffViewMode = 'unified'}
+          >
+            Unified
+          </button>
+        </div>
         <button class="modal-close" onclick={() => { showDiffModal = false; app.diffFile = null; }}>
           <X size={16} />
         </button>
@@ -854,24 +928,15 @@
       <div class="modal-body diff-body">
         {#if app.loadingDiff}
           <p class="loading-text">Loading diff...</p>
-        {:else if !app.diffContent}
+        {:else if !app.diffContent || !parsedDiff}
           <p class="empty-text">No changes to display</p>
         {:else}
-          <div class="diff-highlighted">
-            {#each app.diffContent.split('\n') as line}
-              {#if line.startsWith('diff --git') || line.startsWith('index ') || line.startsWith('---') || line.startsWith('+++')}
-                <!-- skip diff metadata -->
-              {:else if line.startsWith('+')}
-                <div class="diff-line added"><span class="diff-prefix">+</span>{line.slice(1)}</div>
-              {:else if line.startsWith('-')}
-                <div class="diff-line removed"><span class="diff-prefix">-</span>{line.slice(1)}</div>
-              {:else if line.startsWith('@@')}
-                <div class="diff-line hunk">{line}</div>
-              {:else}
-                <div class="diff-line">{line}</div>
-              {/if}
-            {/each}
-          </div>
+          <DiffView 
+            data={parsedDiff}
+            diffViewMode={diffViewMode === 'split' ? DiffModeEnum.Split : DiffModeEnum.Unified}
+            diffViewTheme="dark"
+            diffViewHighlight={true}
+          />
         {/if}
       </div>
       <div class="modal-actions">
@@ -1655,8 +1720,63 @@
   }
 
   .branch-menu-item.active {
-    background-color: rgba(127, 90, 240, 0.12);
-    color: var(--accent);
+    background: var(--bg-tertiary);
+    font-weight: 600;
+  }
+  .branch-menu-item:hover {
+    background: var(--bg-tertiary);
+  }
+  .branch-section-label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 7px 10px 3px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    user-select: none;
+  }
+  .branch-section-label:first-child {
+    padding-top: 4px;
+  }
+  .section-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    font-size: 8px;
+    font-weight: 800;
+    background: var(--text-secondary);
+    color: var(--bg-primary);
+  }
+  .remote-section .section-icon {
+    background: var(--info);
+    color: white;
+  }
+  .remote-item {
+    opacity: 0.75;
+  }
+  .remote-item:hover {
+    opacity: 1;
+  }
+  .branch-name {
+    flex: 1;
+    text-align: left;
+  }
+  .branch-tag {
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-weight: 600;
+    margin-left: 6px;
+  }
+  .local-tag {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
   }
 
   .file-changes-split {
@@ -1773,6 +1893,14 @@
 
   .file-action-btn.accept:hover {
     background-color: rgba(44, 182, 125, 0.12);
+  }
+
+  .file-action-btn.danger {
+    color: var(--danger);
+  }
+
+  .file-action-btn.danger:hover {
+    background-color: rgba(242, 95, 76, 0.12);
   }
 
   .commit-area {
@@ -2008,44 +2136,35 @@
     overflow: hidden;
   }
 
-  .diff-highlighted {
-    font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
-    font-size: 12px;
-    line-height: 1.5;
-    overflow-x: auto;
+  .diff-body :global(.diff-container) {
     max-height: 60vh;
-    overflow-y: auto;
+    overflow: auto;
   }
 
-  .diff-line {
-    padding: 1px 12px;
-    white-space: pre;
-    border-left: 3px solid transparent;
+  .diff-view-controls {
+    display: flex;
+    gap: 4px;
+    margin-right: auto;
+    margin-left: 12px;
   }
 
-  .diff-line.added {
-    background-color: rgba(44, 182, 125, 0.15);
-    border-left-color: var(--success);
-    color: var(--success);
-  }
-
-  .diff-line.removed {
-    background-color: rgba(242, 95, 76, 0.15);
-    border-left-color: var(--danger);
-    color: var(--danger);
-  }
-
-  .diff-line.hunk {
-    background-color: rgba(127, 90, 240, 0.1);
-    color: var(--accent);
-    font-weight: 600;
-    padding: 4px 12px;
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-  }
-
-  .diff-prefix {
+  .diff-mode-btn {
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    background: var(--bg-tertiary);
     color: var(--text-secondary);
-    margin-right: 4px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+
+  .diff-mode-btn:hover {
+    background: var(--border);
+  }
+
+  .diff-mode-btn.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
   }
 </style>

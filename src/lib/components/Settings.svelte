@@ -1,8 +1,12 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
+
   import type { AppConfig, Repository } from '../types';
+
   import AuthSetup from './AuthSetup.svelte';
-  import { Settings as SettingsIcon, FolderGit2, GitBranch, Trash2 } from '@lucide/svelte';
+  import ImportModal from './ImportModal.svelte';
+
+  import { Settings as SettingsIcon, FolderGit2, GitBranch, Trash2, Plus } from '@lucide/svelte';
 
   const dispatch = createEventDispatcher<{
     themeChange: string;
@@ -24,6 +28,7 @@
   let newRepoPath: string = $state('');
   let loading: boolean = $state(false);
   let error: string | null = $state(null);
+  let showImportModal: boolean = $state(false);
   let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
   const themes = [
@@ -124,6 +129,11 @@
     } catch (e) {
       console.error('Failed to open folder dialog:', e);
     }
+  }
+
+  function handleImportComplete() {
+    showImportModal = false;
+    loadRepos();
   }
 </script>
 
@@ -242,6 +252,10 @@
           <button class="accent-btn" onclick={addRepo} disabled={loading || !newRepoPath}>
             Add
           </button>
+          <button class="import-btn" onclick={() => showImportModal = true}>
+            <Plus size={14} />
+            Import Folder
+          </button>
         </div>
 
         <div class="item-list">
@@ -272,6 +286,13 @@
     {/if}
   </div>
 </div>
+
+{#if showImportModal}
+  <ImportModal
+    on:close={() => showImportModal = false}
+    on:complete={handleImportComplete}
+  />
+{/if}
 
 <style>
   .settings-layout {
@@ -408,6 +429,22 @@
 
   .secondary-btn:hover {
     background-color: var(--border);
+  }
+
+  .import-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+    padding: 8px 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    border: 1px dashed var(--border);
+  }
+  .import-btn:hover {
+    background-color: var(--border);
+    border-color: var(--text-secondary);
   }
 
   .item-list {

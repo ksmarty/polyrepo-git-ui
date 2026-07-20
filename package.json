@@ -16,6 +16,9 @@
     "update:apply": "pnpm update -i && cd src-tauri && cargo update"
   },
   "dependencies": {
+    "@git-diff-view/core": "^0.1.7",
+    "@git-diff-view/file": "^0.1.7",
+    "@git-diff-view/svelte": "^0.1.7",
     "@lucide/svelte": "^1.24.0",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-dialog": "^2.7.1",

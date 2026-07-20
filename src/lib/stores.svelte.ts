@@ -300,6 +300,16 @@ class AppState {
     }
   }
 
+  async discardFile(id: string, filePath: string) {
+    try {
+      await api.discardFile(id, filePath);
+      await this.loadGitStatus(id);
+      this.showNotification('success', `Discarded changes to ${filePath}`);
+    } catch (e) {
+      this.showNotification('error', `Discard failed: ${e}`);
+    }
+  }
+
   async stashRepo(id: string) {
     try {
       await api.stash(id);

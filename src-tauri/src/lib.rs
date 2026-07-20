@@ -356,6 +356,18 @@ async fn get_config(state: tauri::State<'_, AppState>) -> Result<AppConfig, Stri
 }
 
 #[tauri::command]
+async fn get_config_path() -> Result<String, String> {
+    config::Config::config_path_string().ok_or("Could not determine config path".to_string())
+}
+
+#[tauri::command]
+async fn open_config_folder() -> Result<(), String> {
+    let dir = config::Config::config_dir().ok_or("Could not determine config directory")?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create config directory: {}", e))?;
+    open::that(&dir).map_err(|e| format!("Failed to open config folder: {}", e))
+}
+
+#[tauri::command]
 async fn update_config(
     state: tauri::State<'_, AppState>,
     config: AppConfig,
@@ -581,6 +593,8 @@ pub fn run() {
             sync_pr,
             get_config,
             update_config,
+            get_config_path,
+            open_config_folder,
             clone_repo,
             check_git_installed,
             get_github_auth,

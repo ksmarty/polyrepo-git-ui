@@ -51,12 +51,25 @@ impl Default for Config {
 }
 
 impl Config {
-    fn config_dir() -> Option<PathBuf> {
-        dirs::config_dir().map(|d| d.join("polyrepo-git-ui"))
+    pub fn config_dir() -> Option<PathBuf> {
+        // Use ~/.config/polyrepo-git-ui on all Unix platforms (matches Linux XDG convention)
+        // Windows still uses the standard config_dir (AppData/Roaming)
+        #[cfg(unix)]
+        {
+            dirs::home_dir().map(|d| d.join(".config").join("polyrepo-git-ui"))
+        }
+        #[cfg(not(unix))]
+        {
+            dirs::config_dir().map(|d| d.join("polyrepo-git-ui"))
+        }
     }
 
     fn config_file() -> Option<PathBuf> {
         Self::config_dir().map(|d| d.join("config.toml"))
+    }
+
+    pub fn config_path_string() -> Option<String> {
+        Self::config_file().map(|p| p.to_string_lossy().to_string())
     }
 
     pub fn load() -> Result<Self, String> {

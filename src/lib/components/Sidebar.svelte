@@ -2,7 +2,7 @@
   import ImportModal from './ImportModal.svelte';
   import CloneModal from './CloneModal.svelte';
   import Sortable from 'sortablejs';
-  import { Search, Plus, FolderPlus, ChevronRight, ChevronDown, GitBranch, Filter, Download } from '@lucide/svelte';
+  import { Search, Plus, FolderPlus, ChevronRight, ChevronDown, GitBranch, Filter, Download, Trash2 } from '@lucide/svelte';
   import { app } from '../stores.svelte';
   import type { Repository, RepoGroup } from '../types';
 
@@ -15,6 +15,7 @@
   let isDraggingRepo: boolean = $state(false);
   let dragOverGroupId: string | null = $state(null);
   let filterStale: boolean = $state(false);
+  let contextMenu: { x: number; y: number; repoId: string } | null = $state(null);
 
   function toggleGroup(groupId: string) {
     const next = new Set(expandedGroups);
@@ -82,6 +83,32 @@
 
   function handleRepoClick(repo: Repository) {
     app.selectRepo(repo);
+  }
+
+  function handleContextMenu(e: MouseEvent, repo: Repository) {
+    e.preventDefault();
+    contextMenu = { x: e.clientX, y: e.clientY, repoId: repo.id };
+  }
+
+  function closeContextMenu() {
+    contextMenu = null;
+  }
+
+  async function removeRepoFromSidebar() {
+    if (!contextMenu) return;
+    const id = contextMenu.repoId;
+    closeContextMenu();
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('remove_repo', { id });
+      await app.loadAll();
+    } catch (e) {
+      console.error('Failed to remove repo:', e);
+    }
+  }
+
+  async function fetchRepoFromSidebar(repoId: string) {
+    await app.fetchRepo(repoId);
   }
 
   function handleImportComplete() {
@@ -294,6 +321,18 @@
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'repo', id: repoId }));
   }
+
+  $effect(() => {
+    if (!contextMenu) return;
+    function handleClick() { contextMenu = null; }
+    function handleKeydown(e: KeyboardEvent) { if (e.key === 'Escape') contextMenu = null; }
+    window.addEventListener('click', handleClick);
+    window.addEventListener('keydown', handleKeydown);
+    return () => {
+      window.removeEventListener('click', handleClick);
+      window.removeEventListener('keydown', handleKeydown);
+    };
+  });
 </script>
 
 <aside class="sidebar">
@@ -450,10 +489,20 @@
                         draggable="true"
                         ondragstart={(e) => onRepoDragStart(e, repo.id)}
                         onclick={() => handleRepoClick(repo)}
+                        oncontextmenu={(e) => handleContextMenu(e, repo)}
                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleRepoClick(repo); } }}
                       >
                         <span class="sync-dot {getSyncClass(repo)}"></span>
                         <span class="repo-name">{repo.name}</span>
+                        {#if repo.sync_status && repo.sync_status.behind > 0}
+                          <button
+                            class="repo-action-btn"
+                            onclick={(e) => { e.stopPropagation(); fetchRepoFromSidebar(repo.id); }}
+                            title={`Fetch — ${repo.sync_status.behind} commit${repo.sync_status.behind !== 1 ? 's' : ''} behind`}
+                          >
+                            <Download size={12} />
+                          </button>
+                        {/if}
                       </div>
                     {/each}
                   </div>
@@ -478,10 +527,20 @@
                   draggable="true"
                   ondragstart={(e) => onRepoDragStart(e, repo.id)}
                   onclick={() => handleRepoClick(repo)}
+                  oncontextmenu={(e) => handleContextMenu(e, repo)}
                   onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleRepoClick(repo); } }}
                 >
                   <span class="sync-dot {getSyncClass(repo)}"></span>
                   <span class="repo-name">{repo.name}</span>
+                  {#if repo.sync_status && repo.sync_status.behind > 0}
+                    <button
+                      class="repo-action-btn"
+                      onclick={(e) => { e.stopPropagation(); fetchRepoFromSidebar(repo.id); }}
+                      title={`Fetch — ${repo.sync_status.behind} commit${repo.sync_status.behind !== 1 ? 's' : ''} behind`}
+                    >
+                      <Download size={12} />
+                    </button>
+                  {/if}
                 </div>
               {/each}
             </div>
@@ -507,10 +566,20 @@
           draggable="true"
           ondragstart={(e) => onRepoDragStart(e, repo.id)}
           onclick={() => handleRepoClick(repo)}
+          oncontextmenu={(e) => handleContextMenu(e, repo)}
           onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleRepoClick(repo); } }}
         >
           <span class="sync-dot {getSyncClass(repo)}"></span>
           <span class="repo-name">{repo.name}</span>
+          {#if repo.sync_status && repo.sync_status.behind > 0}
+            <button
+              class="repo-action-btn"
+              onclick={(e) => { e.stopPropagation(); fetchRepoFromSidebar(repo.id); }}
+              title={`Fetch — ${repo.sync_status.behind} commit${repo.sync_status.behind !== 1 ? 's' : ''} behind`}
+            >
+              <Download size={12} />
+            </button>
+          {/if}
         </div>
       {/each}
     </div>
@@ -524,6 +593,20 @@
     {/if}
   </div>
 </aside>
+
+{#if contextMenu}
+  <div
+    class="context-menu"
+    style="left: {contextMenu.x}px; top: {contextMenu.y}px"
+    role="menu"
+    onclick={(e) => e.stopPropagation()}
+  >
+    <button class="context-menu-item danger" role="menuitem" onclick={removeRepoFromSidebar}>
+      <Trash2 size={14} />
+      Remove
+    </button>
+  </div>
+{/if}
 
 {#if showImportModal}
   <ImportModal
@@ -845,5 +928,63 @@
   .hint {
     font-size: 12px;
     opacity: 0.6;
+  }
+
+  .repo-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.15s, background-color 0.15s;
+  }
+
+  .repo-item:hover .repo-action-btn {
+    opacity: 1;
+  }
+
+  .repo-action-btn:hover {
+    background-color: var(--accent);
+    color: white;
+  }
+
+  .context-menu {
+    position: fixed;
+    z-index: 100;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px;
+    min-width: 140px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  }
+
+  .context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 6px;
+    text-align: left;
+  }
+
+  .context-menu-item:hover {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .context-menu-item.danger:hover {
+    background-color: rgba(242, 95, 76, 0.1);
+    color: var(--danger);
   }
 </style>

@@ -6,7 +6,7 @@
   import AuthSetup from './AuthSetup.svelte';
   import ImportModal from './ImportModal.svelte';
 
-  import { Settings as SettingsIcon, FolderGit2, GitBranch, Trash2, Plus } from '@lucide/svelte';
+  import { Settings as SettingsIcon, FolderGit2, GitBranch, Trash2, Plus, FolderOpen } from '@lucide/svelte';
 
   const dispatch = createEventDispatcher<{
     themeChange: string;
@@ -30,6 +30,7 @@
   let error: string | null = $state(null);
   let showImportModal: boolean = $state(false);
   let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+  let configPath: string = $state('');
 
   const themes = [
     { value: 'system', label: 'System' },
@@ -45,6 +46,7 @@
   onMount(async () => {
     await loadConfig();
     await loadRepos();
+    await loadConfigPath();
   });
 
   async function loadConfig() {
@@ -53,6 +55,24 @@
       config = await invoke('get_config');
     } catch (e) {
       console.error('Failed to load config:', e);
+    }
+  }
+
+  async function loadConfigPath() {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      configPath = await invoke('get_config_path');
+    } catch (e) {
+      console.error('Failed to load config path:', e);
+    }
+  }
+
+  async function openConfigFolder() {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('open_config_folder');
+    } catch (e) {
+      console.error('Failed to open config folder:', e);
     }
   }
 
@@ -235,6 +255,18 @@
             max="3600"
           />
         </div>
+
+        <div class="form-group">
+          <label>Config File</label>
+          <div class="location-row">
+            <code class="config-path">{configPath || '...'}</code>
+            <button class="secondary-btn" onclick={openConfigFolder} title="Open config folder">
+              <FolderOpen size={14} />
+              Open
+            </button>
+          </div>
+          <p class="hint">Configuration is stored as TOML</p>
+        </div>
       </div>
 
     {:else if activeSection === 'repos'}
@@ -390,6 +422,20 @@
   .location-row input {
     flex: 1;
     max-width: none;
+  }
+
+  .config-path {
+    flex: 1;
+    font-size: 12px;
+    padding: 8px 12px;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: monospace;
   }
 
   .hint {

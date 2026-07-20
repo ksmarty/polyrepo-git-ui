@@ -7,6 +7,7 @@
   import ImportModal from './ImportModal.svelte';
 
   import { Settings as SettingsIcon, FolderGit2, GitBranch, Trash2, Plus, FolderOpen } from '@lucide/svelte';
+  import { app } from '../stores.svelte';
 
   const dispatch = createEventDispatcher<{
     themeChange: string;
@@ -31,6 +32,7 @@
   let showImportModal: boolean = $state(false);
   let saveTimeout: ReturnType<typeof setTimeout> | null = null;
   let configPath: string = $state('');
+  let previousTheme: string = $state('');
 
   const themes = [
     { value: 'system', label: 'System' },
@@ -53,6 +55,7 @@
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       config = await invoke('get_config');
+      previousTheme = config.theme;
     } catch (e) {
       console.error('Failed to load config:', e);
     }
@@ -82,9 +85,17 @@
       try {
         const { invoke } = await import('@tauri-apps/api/core');
         await invoke('update_config', { config });
-        dispatch('themeChange', config.theme);
+        app.config = { ...config };
+        const themeChanged = config.theme !== previousTheme;
+        previousTheme = config.theme;
+        if (themeChanged) {
+          dispatch('themeChange', config.theme);
+        }
+        app.showNotification('success', 'Settings saved');
       } catch (e) {
-        error = e instanceof Error ? e.message : 'Failed to save settings';
+        const msg = e instanceof Error ? e.message : 'Failed to save settings';
+        error = msg;
+        app.showNotification('error', msg);
       }
     }, 400);
   }

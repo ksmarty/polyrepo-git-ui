@@ -432,12 +432,92 @@ async fn set_github_pat(
     Ok(())
 }
 
+fn load_oauth_credentials() -> Result<(String, String), String> {
+    // 1. Environment variables (highest priority, for dev override)
+    let env_id = std::env::var("OAUTH_CLIENT_ID")
+        .or_else(|_| std::env::var("GITHUB_OAUTH_CLIENT_ID"));
+    let env_secret = std::env::var("OAUTH_CLIENT_SECRET")
+        .or_else(|_| std::env::var("GITHUB_OAUTH_CLIENT_SECRET"));
+    if let (Ok(id), Ok(secret)) = (env_id, env_secret) {
+        if !id.is_empty() && !secret.is_empty() {
+            return Ok((id, secret));
+        }
+    }
+
+    // 2. .env next to the executable
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            let path = exe_dir.join(".env");
+            if let Ok((id, secret)) = read_env_file(&path) {
+                return Ok((id, secret));
+            }
+        }
+    }
+
+    // 3. .env in project root (dev mode: CARGO_MANIFEST_DIR is src-tauri/)
+    if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+        let path = std::path::PathBuf::from(manifest_dir)
+            .parent()
+            .unwrap_or(std::path::Path::new("."))
+            .join(".env");
+        if let Ok((id, secret)) = read_env_file(&path) {
+            return Ok((id, secret));
+        }
+    }
+
+    // 4. Credentials embedded at compile time (set via env vars during CI build)
+    let id = option_env!("OAUTH_CLIENT_ID")
+        .or_else(|| option_env!("GITHUB_OAUTH_CLIENT_ID"))
+        .unwrap_or("");
+    let secret = option_env!("OAUTH_CLIENT_SECRET")
+        .or_else(|| option_env!("GITHUB_OAUTH_CLIENT_SECRET"))
+        .unwrap_or("");
+    if !id.is_empty() && !secret.is_empty() {
+        return Ok((id.to_string(), secret.to_string()));
+    }
+
+    Err(
+        "OAuth not configured. Create a .env file in the project root with:\n\
+         OAUTH_CLIENT_ID=your_id\n\
+         OAUTH_CLIENT_SECRET=your_secret\n\
+         Or set those as environment variables."
+            .to_string(),
+    )
+}
+
+fn read_env_file(path: &std::path::Path) -> Result<(String, String), String> {
+    if !path.exists() {
+        return Err(format!("File not found: {}", path.display()));
+    }
+    let content = std::fs::read_to_string(path)
+        .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
+    let mut id = String::new();
+    let mut secret = String::new();
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some((key, value)) = line.split_once('=') {
+            let key = key.trim();
+            let value = value.trim().trim_matches('"').trim_matches('\'');
+            match key {
+                "OAUTH_CLIENT_ID" | "GITHUB_OAUTH_CLIENT_ID" => id = value.to_string(),
+                "OAUTH_CLIENT_SECRET" | "GITHUB_OAUTH_CLIENT_SECRET" => secret = value.to_string(),
+                _ => {}
+            }
+        }
+    }
+    if id.is_empty() || secret.is_empty() {
+        return Err(format!("Missing OAUTH_CLIENT_ID or OAUTH_CLIENT_SECRET in {}", path.display()));
+    }
+    Ok((id, secret))
+}
+
 #[tauri::command]
 async fn start_github_oauth(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let client_id = std::env::var("GITHUB_OAUTH_CLIENT_ID")
-        .map_err(|_| "GITHUB_OAUTH_CLIENT_ID env var not set".to_string())?;
-    let client_secret = std::env::var("GITHUB_OAUTH_CLIENT_SECRET")
-        .map_err(|_| "GITHUB_OAUTH_CLIENT_SECRET env var not set".to_string())?;
+    // Load credentials: env vars > oauth.toml next to executable > oauth.toml in project root
+    let (client_id, client_secret) = load_oauth_credentials()?;
 
     let listener = TcpListener::bind("127.0.0.1:14201")
         .map_err(|e| format!("Failed to bind local server: {}", e))?;

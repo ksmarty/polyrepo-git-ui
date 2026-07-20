@@ -36,9 +36,13 @@ You can authenticate with GitHub using either a **Personal Access Token** or **O
    - `read:org` — Read organization membership
 3. In the app, go to **Settings > GitHub** and paste your token
 
-### Option 2: OAuth App (more secure)
+### Option 2: OAuth App (recommended, works out of the box)
 
-#### Step 1: Create a GitHub OAuth App
+The app includes a bundled OAuth App. Just click **Connect with GitHub** in Settings > GitHub — no setup required.
+
+#### For developers: using your own OAuth App
+
+If you're forking the project or want to use your own OAuth credentials:
 
 1. Go to [GitHub Settings > Developer settings > OAuth Apps](https://github.com/settings/developers)
 2. Click **New OAuth App**
@@ -49,40 +53,30 @@ You can authenticate with GitHub using either a **Personal Access Token** or **O
 4. Click **Register application**
 5. Copy the **Client ID**
 6. Click **Generate a new client secret** and copy the secret (shown once)
+7. Copy `.env.example` to `.env` in the project root and fill in your credentials:
 
-#### Step 2: Set environment variables
-
-Before running the app, export the credentials in your terminal:
-
-```bash
-export GITHUB_OAUTH_CLIENT_ID="your_client_id_here"
-export GITHUB_OAUTH_CLIENT_SECRET="your_client_secret_here"
-pnpm tauri dev
+```
+OAUTH_CLIENT_ID=your_client_id_here
+OAUTH_CLIENT_SECRET=your_client_secret_here
 ```
 
-Or add them to your shell profile (`~/.zshrc`, `~/.bashrc`, etc.):
+`.env` is gitignored and won't be committed.
 
-```bash
-export GITHUB_OAUTH_CLIENT_ID="your_client_id_here"
-export GITHUB_OAUTH_CLIENT_SECRET="your_client_secret_here"
-```
-
-#### Step 3: Authenticate
+#### How the OAuth flow works
 
 1. In the app, go to **Settings > GitHub**
-2. Click **Authenticate with GitHub**
-3. Your browser will open with the GitHub authorization page
+2. Click **Connect with GitHub**
+3. Your browser opens with the GitHub authorization page
 4. Click **Authorize**
-5. You'll see "Authenticated!" — you can close the browser tab
-6. The app will show your GitHub username
+5. You'll see "Authenticated!" — close the browser tab
+6. The app shows your GitHub username
 
-The OAuth flow runs a local callback server on port `14201` for 2 minutes. If it times out, try again.
+The flow runs a local callback server on port `14201` for 2 minutes. If it times out, try again.
 
 ## Configuration
 
 Config is stored at:
-- **macOS**: `~/Library/Application Support/polyrepo-git-ui/config.toml`
-- **Linux**: `~/.config/polyrepo-git-ui/config.toml`
+- **macOS / Linux**: `~/.config/polyrepo-git-ui/config.toml`
 - **Windows**: `%APPDATA%\polyrepo-git-ui\config.toml`
 
 ## Running tests

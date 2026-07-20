@@ -305,12 +305,13 @@ async fn reorder_repos(
 async fn get_all_prs(state: tauri::State<'_, AppState>) -> Result<Vec<PullRequest>, String> {
     let (repos_data, token) = {
         let config = state.config.lock().await;
-        let repos_data: Vec<(String, String)> = config
+        let repos_data: Vec<(String, String, String)> = config
             .repos
             .iter()
             .filter(|r| r.github_owner.is_some() && r.github_repo.is_some())
             .map(|r| {
                 (
+                    r.id.clone(),
                     r.github_owner.clone().unwrap_or_default(),
                     r.github_repo.clone().unwrap_or_default(),
                 )
@@ -324,8 +325,8 @@ async fn get_all_prs(state: tauri::State<'_, AppState>) -> Result<Vec<PullReques
         None => return Ok(Vec::new()),
     };
     let mut all_prs = Vec::new();
-    for (owner, name) in repos_data {
-        match github::get_prs(&token, &owner, &name).await {
+    for (repo_id, owner, name) in repos_data {
+        match github::get_prs(&token, &owner, &name, &repo_id).await {
             Ok(prs) => all_prs.extend(prs),
             Err(e) => {
                 eprintln!("Failed to get PRs for {}/{}: {}", owner, name, e);

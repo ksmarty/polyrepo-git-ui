@@ -1,5 +1,8 @@
 <script lang="ts">
+  import { createEventDispatcher } from 'svelte';
   import { GitBranch, Unplug, KeyRound, ExternalLink } from '@lucide/svelte';
+
+  const dispatch = createEventDispatcher<{ authChange: void }>();
 
   let authMethod: 'oauth' | 'pat' | null = $state(null);
   let patToken: string = $state('');
@@ -29,6 +32,7 @@
       await invoke('start_github_oauth');
       success = 'OAuth flow completed successfully';
       await loadAuth();
+      dispatch('authChange');
     } catch (e) {
       error = e instanceof Error ? e.message : 'OAuth failed';
     } finally {
@@ -46,6 +50,7 @@
       success = 'PAT saved successfully';
       patToken = '';
       await loadAuth();
+      dispatch('authChange');
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to save PAT';
     } finally {
@@ -61,6 +66,7 @@
       authMethod = null;
       patUser = '';
       success = 'Disconnected from GitHub';
+      dispatch('authChange');
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to disconnect';
     }

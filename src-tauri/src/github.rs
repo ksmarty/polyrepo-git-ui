@@ -84,7 +84,7 @@ struct RestBranch {
     ref_name: String,
 }
 
-pub async fn get_prs(token: &str, owner: &str, name: &str) -> Result<Vec<PullRequest>, String> {
+pub async fn get_prs(token: &str, owner: &str, name: &str, repo_id: &str) -> Result<Vec<PullRequest>, String> {
     let query = r#"
         query RepoPRs($owner: String!, $name: String!) {
             repository(owner: $owner, name: $name) {
@@ -164,7 +164,7 @@ pub async fn get_prs(token: &str, owner: &str, name: &str) -> Result<Vec<PullReq
                 title: pr.title,
                 head_ref: pr.headRefName,
                 base_ref: pr.baseRefName,
-                repo_id: String::new(),
+                repo_id: repo_id.to_string(),
                 repo_name: name.to_string(),
                 state: "open".to_string(),
                 mergeable: pr.mergeable == "MERGEABLE",

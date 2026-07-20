@@ -12,6 +12,7 @@
   const dispatch = createEventDispatcher<{
     themeChange: string;
     dataChange: void;
+    authChange: void;
   }>();
 
   let activeSection: 'general' | 'repos' | 'github' = $state('general');
@@ -324,7 +325,7 @@
 
     {:else if activeSection === 'github'}
       <div class="section">
-        <AuthSetup />
+        <AuthSetup on:authChange={() => dispatch('authChange')} />
       </div>
     {/if}
   </div>

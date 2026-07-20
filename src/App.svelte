@@ -626,7 +626,7 @@
       {:else if activeTab === 'prs'}
         <PRList />
       {:else if activeTab === 'settings'}
-        <Settings on:themeChange={handleThemeChange} on:dataChange={handleDataChange} />
+        <Settings on:themeChange={handleThemeChange} on:dataChange={handleDataChange} on:authChange={checkGitHubAuth} />
       {/if}
     </main>
   </div>

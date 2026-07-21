@@ -404,6 +404,50 @@ async fn check_git_installed() -> Result<bool, String> {
 }
 
 #[tauri::command]
+async fn detect_installed_apps() -> Result<serde_json::Value, String> {
+    let mut vscode = false;
+    let mut intellij = false;
+
+    // Check VS Code
+    if let Ok(output) = tokio::process::Command::new("which")
+        .arg("code")
+        .output()
+        .await
+    {
+        vscode = output.status.success();
+    }
+    if !vscode {
+        if let Ok(output) = tokio::process::Command::new("mdfind")
+            .args(["kMDItemCFBundleIdentifier == com.microsoft.VSCode"])
+            .output()
+            .await
+        {
+            vscode = output.status.success() && !output.stdout.is_empty();
+        }
+    }
+
+    // Check IntelliJ
+    if let Ok(output) = tokio::process::Command::new("which")
+        .arg("idea")
+        .output()
+        .await
+    {
+        intellij = output.status.success();
+    }
+    if !intellij {
+        if let Ok(output) = tokio::process::Command::new("mdfind")
+            .args(["kMDItemCFBundleIdentifier == com.jetbrains.intellij"])
+            .output()
+            .await
+        {
+            intellij = output.status.success() && !output.stdout.is_empty();
+        }
+    }
+
+    Ok(serde_json::json!({ "vscode": vscode, "intellij": intellij }))
+}
+
+#[tauri::command]
 async fn get_github_auth(state: tauri::State<'_, AppState>) -> Result<models::GitHubAuth, String> {
     let config = state.config.lock().await;
     Ok(config.github_auth.clone())
@@ -411,11 +455,22 @@ async fn get_github_auth(state: tauri::State<'_, AppState>) -> Result<models::Gi
 
 #[tauri::command]
 async fn get_github_token_scopes(state: tauri::State<'_, AppState>) -> Result<Vec<String>, String> {
-    let config = state.config.lock().await;
-    let token = match &config.github_auth.token {
-        Some(t) => t.clone(),
-        None => return Ok(vec![]),
+    let token = {
+        let config = state.config.lock().await;
+        match &config.github_auth.token {
+            Some(t) => t.clone(),
+            None => return Ok(vec![]),
+        }
     };
+
+    // Check cache
+    {
+        let cached_token = state.cached_scopes_token.lock().await;
+        let cached = state.cached_scopes.lock().await;
+        if cached.is_some() && cached_token.as_deref() == Some(&token) {
+            return Ok(cached.clone().unwrap_or_default());
+        }
+    }
 
     let client = reqwest::Client::new();
     let response = client
@@ -434,6 +489,12 @@ async fn get_github_token_scopes(state: tauri::State<'_, AppState>) -> Result<Ve
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .collect();
+
+    // Cache the result
+    {
+        *state.cached_scopes_token.lock().await = Some(token);
+        *state.cached_scopes.lock().await = Some(parts.clone());
+    }
 
     Ok(parts)
 }
@@ -660,6 +721,8 @@ async fn scan_directory_for_repos(path: String) -> Result<Vec<String>, String> {
 
 struct AppState {
     config: tokio::sync::Mutex<config::Config>,
+    cached_scopes: tokio::sync::Mutex<Option<Vec<String>>>,
+    cached_scopes_token: tokio::sync::Mutex<Option<String>>,
 }
 
 pub fn run() {
@@ -670,6 +733,8 @@ pub fn run() {
             let config = config::Config::load().unwrap_or_default();
             app.manage(AppState {
                 config: tokio::sync::Mutex::new(config),
+                cached_scopes: tokio::sync::Mutex::new(None),
+                cached_scopes_token: tokio::sync::Mutex::new(None),
             });
             Ok(())
         })
@@ -714,6 +779,7 @@ pub fn run() {
             open_config_folder,
             clone_repo,
             check_git_installed,
+            detect_installed_apps,
             get_github_auth,
             get_github_token_scopes,
             set_github_pat,

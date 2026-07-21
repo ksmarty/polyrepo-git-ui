@@ -15,7 +15,7 @@
   let isDraggingRepo: boolean = $state(false);
   let dragOverGroupId: string | null = $state(null);
   let filterStale: boolean = $state(false);
-  let contextMenu: { x: number; y: number; repoId: string } | null = $state(null);
+  let contextMenu: { x: number; y: number; repoId?: string; groupId?: string } | null = $state(null);
 
   function toggleGroup(groupId: string) {
     const next = new Set(expandedGroups);
@@ -90,8 +90,44 @@
     contextMenu = { x: e.clientX, y: e.clientY, repoId: repo.id };
   }
 
+  function handleGroupContextMenu(e: MouseEvent, groupId: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    contextMenu = { x: e.clientX, y: e.clientY, groupId };
+  }
+
   function closeContextMenu() {
     contextMenu = null;
+  }
+
+  async function sortReposByName(groupId: string | null, ascending: boolean) {
+    const reposInGroup = app.repos
+      .filter(r => r.group_id === groupId)
+      .sort((a, b) => ascending ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name));
+    const repoIds = reposInGroup.map(r => r.id);
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('reorder_repos', { repoIds });
+      await app.loadAll();
+    } catch (e) {
+      console.error('Failed to sort repos:', e);
+    }
+    closeContextMenu();
+  }
+
+  async function sortRootGroups(ascending: boolean) {
+    const rootGroups = app.groups
+      .filter(g => g.parent_id === null)
+      .sort((a, b) => ascending ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name));
+    const groupIds = rootGroups.map(g => g.id);
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('reorder_groups', { groupIds });
+      await app.loadAll();
+    } catch (e) {
+      console.error('Failed to sort groups:', e);
+    }
+    closeContextMenu();
   }
 
   async function removeRepoFromSidebar() {
@@ -410,6 +446,7 @@
           aria-expanded={expandedGroups.has(group.id)}
           aria-selected="false"
           onclick={() => { if (!empty) toggleGroup(group.id); }}
+          oncontextmenu={(e) => handleGroupContextMenu(e, group.id)}
           onkeydown={(e) => { if (!empty && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleGroup(group.id); } }}
           ondragover={(e) => handleGroupDragOver(e, group.id)}
           ondragleave={(e) => handleGroupDragLeave(e, group.id)}
@@ -606,10 +643,26 @@
     role="menu"
     onclick={(e) => e.stopPropagation()}
   >
-    <button class="context-menu-item danger" role="menuitem" onclick={removeRepoFromSidebar}>
-      <Trash2 size={14} />
-      Remove
-    </button>
+    {#if contextMenu.repoId}
+      <button class="context-menu-item danger" role="menuitem" onclick={removeRepoFromSidebar}>
+        <Trash2 size={14} />
+        Remove
+      </button>
+    {:else if contextMenu.groupId}
+      <button class="context-menu-item" role="menuitem" onclick={() => sortReposByName(contextMenu!.groupId!, true)}>
+        Sort A → Z
+      </button>
+      <button class="context-menu-item" role="menuitem" onclick={() => sortReposByName(contextMenu!.groupId!, false)}>
+        Sort Z → A
+      </button>
+      <div class="context-menu-divider"></div>
+      <button class="context-menu-item" role="menuitem" onclick={() => sortRootGroups(true)}>
+        Sort folders A → Z
+      </button>
+      <button class="context-menu-item" role="menuitem" onclick={() => sortRootGroups(false)}>
+        Sort folders Z → A
+      </button>
+    {/if}
   </div>
 {/if}
 
@@ -992,5 +1045,11 @@
   .context-menu-item.danger:hover {
     background-color: rgba(242, 95, 76, 0.1);
     color: var(--danger);
+  }
+
+  .context-menu-divider {
+    height: 1px;
+    background-color: var(--border);
+    margin: 4px 0;
   }
 </style>

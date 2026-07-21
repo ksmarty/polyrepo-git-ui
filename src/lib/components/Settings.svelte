@@ -1,12 +1,13 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
 
-  import type { AppConfig, Repository } from '../types';
+  import type { AppConfig, Repository, RepoGroup } from '../types';
 
   import AuthSetup from './AuthSetup.svelte';
   import ImportModal from './ImportModal.svelte';
+  import CloneModal from './CloneModal.svelte';
 
-  import { Settings as SettingsIcon, FolderGit2, GitBranch, Trash2, Plus, FolderOpen, Palette } from '@lucide/svelte';
+  import { Settings as SettingsIcon, FolderGit2, GitBranch, Trash2, Plus, FolderOpen, Palette, Download } from '@lucide/svelte';
   import { app } from '../stores.svelte';
 
   const dispatch = createEventDispatcher<{
@@ -28,10 +29,10 @@
   });
 
   let repos: Repository[] = $state([]);
-  let newRepoPath: string = $state('');
-  let loading: boolean = $state(false);
+  let groups: RepoGroup[] = $state([]);
   let error: string | null = $state(null);
   let showImportModal: boolean = $state(false);
+  let showCloneModal: boolean = $state(false);
   let saveTimeout: ReturnType<typeof setTimeout> | null = null;
   let configPath: string = $state('');
   let previousTheme: string = $state('');
@@ -49,6 +50,7 @@
   onMount(async () => {
     await loadConfig();
     await loadRepos();
+    await loadGroups();
     await loadConfigPath();
   });
 
@@ -110,20 +112,23 @@
     }
   }
 
-  async function addRepo() {
-    if (!newRepoPath) return;
-    loading = true;
-    error = null;
+  async function loadGroups() {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('add_repo', { path: newRepoPath });
-      newRepoPath = '';
+      groups = await invoke('get_groups');
+    } catch (e) {
+      console.error('Failed to load groups:', e);
+    }
+  }
+
+  async function moveRepoToGroup(repoId: string, groupId: string | null) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('move_repo_to_group', { repoId, groupId: groupId || null });
       await loadRepos();
       dispatch('dataChange');
     } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to add repo';
-    } finally {
-      loading = false;
+      console.error('Failed to move repo:', e);
     }
   }
 
@@ -138,18 +143,6 @@
       dispatch('dataChange');
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to remove repo';
-    }
-  }
-
-  async function browseFolder() {
-    try {
-      const { open } = await import('@tauri-apps/plugin-dialog');
-      const selected = await open({ directory: true });
-      if (selected && typeof selected === 'string') {
-        newRepoPath = selected;
-      }
-    } catch (e) {
-      console.error('Failed to open folder dialog:', e);
     }
   }
 
@@ -173,6 +166,11 @@
 
   function handleImportComplete() {
     showImportModal = false;
+    loadRepos();
+  }
+
+  function handleCloneComplete() {
+    showCloneModal = false;
     loadRepos();
   }
 </script>
@@ -338,23 +336,18 @@
 
     {:else if activeSection === 'repos'}
       <div class="section">
-        <h3>Repositories</h3>
-
-        <div class="add-row">
-          <input
-            type="text"
-            bind:value={newRepoPath}
-            placeholder="/path/to/repo"
-            onkeydown={(e) => e.key === 'Enter' && addRepo()}
-          />
-          <button class="secondary-btn" onclick={browseFolder}>Browse</button>
-          <button class="accent-btn" onclick={addRepo} disabled={loading || !newRepoPath}>
-            Add
-          </button>
-          <button class="import-btn" onclick={() => showImportModal = true}>
-            <Plus size={14} />
-            Import Folder
-          </button>
+        <div class="section-header">
+          <h3>Repositories</h3>
+          <div class="section-actions">
+            <button class="action-btn" onclick={() => showCloneModal = true}>
+              <Download size={14} />
+              Clone
+            </button>
+            <button class="action-btn" onclick={() => showImportModal = true}>
+              <Plus size={14} />
+              Import
+            </button>
+          </div>
         </div>
 
         <div class="item-list">
@@ -365,6 +358,16 @@
                 <span class="item-detail">{repo.path}</span>
               </div>
               <div class="item-actions">
+                <select
+                  class="folder-select"
+                  value={repo.group_id || ''}
+                  onchange={(e) => moveRepoToGroup(repo.id, (e.target as HTMLSelectElement).value || null)}
+                >
+                  <option value="">Ungrouped</option>
+                  {#each groups as group}
+                    <option value={group.id}>{group.name}</option>
+                  {/each}
+                </select>
                 <button class="danger-btn-sm" onclick={() => removeRepo(repo.id)}>
                   <Trash2 size={14} />
                 </button>
@@ -390,6 +393,13 @@
   <ImportModal
     on:close={() => showImportModal = false}
     on:complete={handleImportComplete}
+  />
+{/if}
+
+{#if showCloneModal}
+  <CloneModal
+    on:close={() => showCloneModal = false}
+    on:complete={handleCloneComplete}
   />
 {/if}
 
@@ -444,13 +454,44 @@
     padding: 24px;
   }
 
-  .section h3 {
-    font-size: 16px;
-    font-weight: 700;
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: 20px;
     padding-bottom: 12px;
     border-bottom: 1px solid var(--border);
+  }
+
+  .section-header h3 {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 0;
+    padding: 0;
+    border: none;
     letter-spacing: -0.02em;
+  }
+
+  .section-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .action-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+
+  .action-btn:hover {
+    background-color: var(--border);
   }
 
   .form-group {
@@ -602,6 +643,20 @@
     display: flex;
     gap: 8px;
     align-items: center;
+  }
+
+  .folder-select {
+    padding: 4px 8px;
+    font-size: 12px;
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .folder-select:hover {
+    border-color: var(--text-secondary);
   }
 
   .danger-btn-sm {

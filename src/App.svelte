@@ -8,7 +8,7 @@
   import type { MergeResult } from './lib/tauri';
   import { DiffView, DiffModeEnum } from '@git-diff-view/svelte';
   import '@git-diff-view/svelte/styles/diff-view-pure.css';
-  import { FolderGit2, GitPullRequest, Settings as SettingsIcon, RefreshCw, Download, ExternalLink, GitMerge, GitBranch, History, AlertTriangle, X, Code, CircleDot, Info, ArrowDownToLine, MoreHorizontal, FolderOpen, Upload, SquareStack, Check, ArrowRightLeft, CheckCircle, XCircle, ChevronDown, FileDiff } from '@lucide/svelte';
+  import { FolderGit2, GitPullRequest, Settings as SettingsIcon, RefreshCw, Download, ExternalLink, GitMerge, GitBranch, History, AlertTriangle, X, Info, ArrowDownToLine, MoreHorizontal, FolderOpen, Upload, SquareStack, Check, ArrowRightLeft, CheckCircle, XCircle, ChevronDown, FileDiff } from '@lucide/svelte';
 
   let activeTab: 'repos' | 'prs' | 'settings' = $state('repos');
   let expandedCommit: string | null = $state(null);
@@ -25,6 +25,7 @@
   let showDiffModal: boolean = $state(false);
   let diffViewMode: 'split' | 'unified' = $state('split');
   let selectedPr: PullRequest | null = $state(null);
+  let installedApps: { vscode: boolean; intellij: boolean } = $state({ vscode: false, intellij: false });
 
   function parseDiffContent(rawDiff: string) {
     if (!rawDiff) return null;
@@ -113,6 +114,16 @@
       await Command.create('open', ['-a', 'IntelliJ IDEA', app.selectedRepo.path]).execute();
     } catch (e) {
       console.error('Failed to open IntelliJ:', e);
+    }
+  }
+
+  async function detectInstalledApps() {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const result = await invoke('detect_installed_apps') as { vscode: boolean; intellij: boolean };
+      installedApps = result;
+    } catch {
+      installedApps = { vscode: false, intellij: false };
     }
   }
 
@@ -225,6 +236,7 @@
   checkGitHubAuth().then(() => {
     if (githubConnected) app.loadPRs();
   });
+  detectInstalledApps();
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
@@ -349,17 +361,21 @@
                       {#if showOpenMenu}
                         <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
                         <div class="open-menu" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
-                          <button class="menu-item" onclick={() => { openInVSCode(); showOpenMenu = false; }}>
-                            <Code size={14} />
-                            VS Code
-                          </button>
-                          <button class="menu-item" onclick={() => { openInIntelliJ(); showOpenMenu = false; }}>
-                            <CircleDot size={14} />
-                            IntelliJ
-                          </button>
+                          {#if installedApps.vscode}
+                            <button class="menu-item" onclick={() => { openInVSCode(); showOpenMenu = false; }}>
+                              <svg viewBox="0 0 24 24" width="14" height="14"><path d="M17.583 2.427L9.458 10.11l-7.416-5.86L0 3.277 17.583 2.427zM9.458 11.89L1.1 7.377v13.29l8.358-4.512v.002zM22.917 12l-3.75 2.021L17.583 14.04l.002 4.083L22.917 12zM11.208 13.771L3.85 18.283l5.608 4.437 7.95-4.28-6.2-4.67z" fill="currentColor" /></svg>
+                              VS Code
+                            </button>
+                          {/if}
+                          {#if installedApps.intellij}
+                            <button class="menu-item" onclick={() => { openInIntelliJ(); showOpenMenu = false; }}>
+                              <svg viewBox="0 0 24 24" width="14" height="14"><path d="M3 3h18v18H3V3zm11.3 4.7c1.7-.2 3.5.4 4.7 1.6-1.2.7-2.7.7-3.9.1l-.3-.2c-.5-.4-1.1-.6-1.7-.6.6.9.8 1.9.8 2.9 0 3.2-2.6 5.8-5.8 5.8S6.1 14.8 6.1 11.6c0-1.5.6-2.9 1.7-4l1.3 1.3c-.6.7-.9 1.6-.9 2.6 0 2.3 1.8 4.1 4.1 4.1s4.1-1.8 4.1-4.1c0-1.1-.4-2.1-1.1-2.9l1.1-.8z" fill="currentColor" /></svg>
+                              IntelliJ
+                            </button>
+                          {/if}
                           {#if getGitHubUrl(app.selectedRepo)}
                             <button class="menu-item" onclick={() => { openGitHub(); showOpenMenu = false; }}>
-                              <ExternalLink size={14} />
+                              <svg viewBox="0 0 24 24" width="14" height="14"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" fill="currentColor" /></svg>
                               GitHub
                             </button>
                           {/if}

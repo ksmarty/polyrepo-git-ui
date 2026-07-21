@@ -694,6 +694,13 @@ pub fn run() {
                     let _ = window.hide();
                 }
             }
+            if let tauri::WindowEvent::Focused(true) = event {
+                if window.is_visible().unwrap_or(false) {
+                    return;
+                }
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
         })
         .invoke_handler(tauri::generate_handler![
             get_repos,

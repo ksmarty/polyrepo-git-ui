@@ -143,7 +143,7 @@
     </div>
   {:else}
     <div class="pr-list flat">
-      <Masonry items={getFilteredPRs()} colWidth={'minmax(400px, 1fr)'} gridGap={'10px'}>
+      <Masonry items={getFilteredPRs()} colWidth={'minmax(calc(50% - 5px), 1fr)'} gridGap={'10px'}>
         {#each getFilteredPRs() as pr (pr.id)}
           <PRCard {pr} repoName={getRepoName(pr.repo_id)} {compact} onSelect={(p) => selectedPr = p} />
         {/each}

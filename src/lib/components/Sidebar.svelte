@@ -335,7 +335,8 @@
   });
 </script>
 
-<aside class="sidebar">
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<aside class="sidebar" onselectstart={(e) => e.preventDefault()}>
   <div class="sidebar-header">
     <div class="search-wrapper">
       <Search size={14} />
@@ -631,6 +632,7 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    user-select: none;
   }
 
   :global(.sortable-ghost) {

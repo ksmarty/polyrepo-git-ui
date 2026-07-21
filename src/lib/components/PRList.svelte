@@ -132,17 +132,17 @@
             <span class="repo-group-name">{repoName}</span>
             <span class="repo-group-count">{prs.length}</span>
           </div>
-          <Masonry items={prs} minColWidth={300} maxColWidth={500} gap={10} idKey="id">
-            {#snippet children({ item })}
-              <PRCard pr={item} repoName="" {compact} onSelect={(p) => selectedPr = p} />
-            {/snippet}
-          </Masonry>
+          <div class="repo-group-prs">
+            {#each prs as pr (pr.id)}
+              <PRCard pr={pr} repoName="" {compact} onSelect={(p) => selectedPr = p} />
+            {/each}
+          </div>
         </div>
       {/each}
     </div>
   {:else}
     <div class="pr-list flat">
-      <Masonry items={getFilteredPRs()} minColWidth={300} maxColWidth={500} gap={10} idKey="id">
+      <Masonry items={getFilteredPRs()} minColWidth={400} gap={10} idKey="id" calcCols={() => 2}>
         {#snippet children({ item })}
           <PRCard pr={item} repoName={getRepoName(item.repo_id)} {compact} onSelect={(p) => selectedPr = p} />
         {/snippet}
@@ -317,6 +317,12 @@
     border-radius: 10px;
     font-size: 11px;
     font-weight: 500;
+  }
+
+  .repo-group-prs {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
 
   .empty-state {

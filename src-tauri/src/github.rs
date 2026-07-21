@@ -149,20 +149,33 @@ async fn get_required_review_count(client: &Client, token: &str, owner: &str, na
 
     for branch in branches_to_try {
         let url = format!("{}/repos/{}/{}/branches/{}/protection/required_pull_request_reviews", GITHUB_API_BASE, owner, name, branch);
+
+        // Try unauthenticated first (works for public repos)
         let response = client
             .get(&url)
-            .bearer_auth(token)
             .header("User-Agent", "polyrepo-git-ui")
             .header("Accept", "application/vnd.github+json")
             .send()
             .await;
 
-        if let Ok(r) = response {
-            if r.status().is_success() {
-                let data: Value = r.json().await.unwrap_or_default();
-                if let Some(count) = data["required_approving_review_count"].as_u64() {
-                    return count as u32;
-                }
+        let response = match response {
+            Ok(r) if r.status().is_success() => Some(r),
+            _ => {
+                client
+                    .get(&url)
+                    .bearer_auth(token)
+                    .header("User-Agent", "polyrepo-git-ui")
+                    .header("Accept", "application/vnd.github+json")
+                    .send()
+                    .await
+                    .ok()
+            }
+        };
+
+        if let Some(r) = response {
+            let data: Value = r.json().await.unwrap_or_default();
+            if let Some(count) = data["required_approving_review_count"].as_u64() {
+                return count as u32;
             }
         }
     }
@@ -204,14 +217,30 @@ async fn get_default_branch(client: &Client, token: &str, owner: &str, name: &st
 
 async fn get_required_review_count_from_rulesets(client: &Client, token: &str, owner: &str, name: &str) -> Option<u32> {
     let url = format!("{}/repos/{}/{}/rulesets", GITHUB_API_BASE, owner, name);
+
+    // Try unauthenticated first (works for public repos, avoids 403 from missing admin permission)
     let response = client
         .get(&url)
-        .bearer_auth(token)
         .header("User-Agent", "polyrepo-git-ui")
         .header("Accept", "application/vnd.github+json")
         .send()
         .await
-        .ok()?;
+        .ok();
+
+    // Fall back to authenticated if unauthenticated fails (private repos)
+    let response = match response {
+        Some(r) if r.status().is_success() => r,
+        _ => {
+            client
+                .get(&url)
+                .bearer_auth(token)
+                .header("User-Agent", "polyrepo-git-ui")
+                .header("Accept", "application/vnd.github+json")
+                .send()
+                .await
+                .ok()?
+        }
+    };
 
     if !response.status().is_success() {
         return None;
@@ -241,14 +270,30 @@ async fn get_required_review_count_from_rulesets(client: &Client, token: &str, o
         // Fetch the individual ruleset to get the rules array
         if let Some(id) = ruleset["id"].as_u64() {
             let detail_url = format!("{}/repos/{}/{}/rulesets/{}", GITHUB_API_BASE, owner, name, id);
-            if let Ok(detail_resp) = client
+
+            // Try unauthenticated first for the detail endpoint too
+            let detail_resp = client
                 .get(&detail_url)
-                .bearer_auth(token)
                 .header("User-Agent", "polyrepo-git-ui")
                 .header("Accept", "application/vnd.github+json")
                 .send()
-                .await
-            {
+                .await;
+
+            let detail_resp = match detail_resp {
+                Ok(r) if r.status().is_success() => Some(r),
+                _ => {
+                    client
+                        .get(&detail_url)
+                        .bearer_auth(token)
+                        .header("User-Agent", "polyrepo-git-ui")
+                        .header("Accept", "application/vnd.github+json")
+                        .send()
+                        .await
+                        .ok()
+                }
+            };
+
+            if let Some(detail_resp) = detail_resp {
                 if let Ok(detail) = detail_resp.json::<Value>().await {
                     if let Some(rules) = detail["rules"].as_array() {
                         for rule in rules {

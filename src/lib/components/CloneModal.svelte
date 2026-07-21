@@ -8,37 +8,90 @@
     complete: void;
   }>();
 
+  const CACHE_KEY = 'polyrepo_github_repos';
+  const CACHE_TTL = 1000 * 60 * 30;
+  const PAGE_SIZE = 30;
+  type Repo = { name: string; full_name: string; clone_url: string; html_url: string; private: boolean };
+
   let url: string = $state('');
   let path: string = $state('');
   let cloning: boolean = $state(false);
   let error: string | null = $state(null);
   let githubConnected: boolean = $state(false);
-  let repos: { name: string; full_name: string; clone_url: string; html_url: string; private: boolean }[] = $state([]);
-  let filteredRepos: typeof repos = $state([]);
+  let allRepos: Repo[] = $state([]);
   let searchQuery: string = $state('');
   let showDropdown: boolean = $state(false);
   let loadingRepos: boolean = $state(false);
-  let selectedRepo: typeof repos[0] | null = $state(null);
+  let selectedRepo: Repo | null = $state(null);
   let dropdownRef: HTMLDivElement | null = $state(null);
+  let sentinelRef: HTMLDivElement | null = $state(null);
+  let displayCount: number = $state(PAGE_SIZE);
+  let observer: IntersectionObserver | null = null;
+
+  let filteredRepos = $derived(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return allRepos;
+    return allRepos.filter(r =>
+      r.full_name.toLowerCase().includes(q) || r.name.toLowerCase().includes(q)
+    );
+  });
+
+  let visibleRepos = $derived(() => filteredRepos().slice(0, displayCount));
+  let hasMore = $derived(() => displayCount < filteredRepos().length);
+
+  function loadCache(): Repo[] | null {
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { repos: Repo[]; timestamp: number };
+      if (Date.now() - parsed.timestamp > CACHE_TTL) return null;
+      return parsed.repos;
+    } catch {
+      return null;
+    }
+  }
+
+  function saveCache(repos: Repo[]) {
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ repos, timestamp: Date.now() }));
+    } catch {}
+  }
 
   onMount(async () => {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       const auth = await invoke('get_github_auth') as { token: string | null };
       githubConnected = !!auth.token;
-      if (githubConnected && auth.token) {
-        await fetchUserRepos(auth.token);
+      if (!githubConnected) return;
+
+      const cached = loadCache();
+      if (cached && cached.length > 0) {
+        allRepos = cached;
       }
+
+      await fetchUserRepos(auth.token!, true);
     } catch {
       githubConnected = false;
     }
   });
 
-  async function fetchUserRepos(token: string) {
-    loadingRepos = true;
+  $effect(() => {
+    if (!showDropdown || !sentinelRef) return;
+    const el = sentinelRef;
+    observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && hasMore()) {
+        displayCount = Math.min(displayCount + PAGE_SIZE, filteredRepos().length);
+      }
+    }, { rootMargin: '100px' });
+    observer.observe(el);
+    return () => observer?.disconnect();
+  });
+
+  async function fetchUserRepos(token: string, isBackground: boolean) {
+    if (!isBackground) loadingRepos = true;
     try {
       const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github.v3+json' };
-      let allRepos: typeof repos = [];
+      let repos: Repo[] = [];
       let page = 1;
       const perPage = 100;
 
@@ -47,7 +100,7 @@
         if (!res.ok) break;
         const data = await res.json();
         if (!data.length) break;
-        allRepos = allRepos.concat(
+        repos = repos.concat(
           data.map((r: any) => ({
             name: r.name,
             full_name: r.full_name,
@@ -60,27 +113,16 @@
         page++;
       }
 
-      repos = allRepos;
-      filteredRepos = allRepos;
+      allRepos = repos;
+      saveCache(repos);
+      displayCount = PAGE_SIZE;
     } catch {
-      repos = [];
-      filteredRepos = [];
+      if (!isBackground) allRepos = [];
     }
     loadingRepos = false;
   }
 
-  function filterRepos() {
-    const q = searchQuery.toLowerCase().trim();
-    if (!q) {
-      filteredRepos = repos;
-    } else {
-      filteredRepos = repos.filter(r =>
-        r.full_name.toLowerCase().includes(q) || r.name.toLowerCase().includes(q)
-      );
-    }
-  }
-
-  function selectRepo(repo: typeof repos[0]) {
+  function selectRepo(repo: Repo) {
     selectedRepo = repo;
     url = repo.clone_url;
     searchQuery = repo.full_name;
@@ -116,9 +158,8 @@
   function clearSearch() {
     searchQuery = '';
     selectedRepo = null;
-    filteredRepos = repos;
-    url = '';
-    path = '';
+    displayCount = PAGE_SIZE;
+    updatePathFromUrl();
   }
 
   async function handleClone() {
@@ -175,12 +216,12 @@
           <label for="repo-search">Search your repositories</label>
           <div class="search-wrapper" bind:this={dropdownRef}>
             <div class="search-input-wrapper">
-              <Search size={14} class="search-icon" />
+              <Search size={14} />
               <input
                 id="repo-search"
                 type="text"
                 bind:value={searchQuery}
-                oninput={() => { filterRepos(); showDropdown = true; selectedRepo = null; }}
+                oninput={() => { showDropdown = true; selectedRepo = null; displayCount = PAGE_SIZE; }}
                 onfocus={() => showDropdown = true}
                 onkeydown={handleSearchKeydown}
                 placeholder="Search repos by name..."
@@ -192,12 +233,12 @@
                   <X size={12} />
                 </button>
               {/if}
-              <ChevronDown size={14} class="chevron" />
+              <ChevronDown size={14} />
             </div>
 
-            {#if showDropdown && filteredRepos.length > 0}
-              <div class="dropdown">
-                {#each filteredRepos.slice(0, 50) as repo}
+            {#if showDropdown && visibleRepos().length > 0}
+              <div class="dropdown dropdown-scroll">
+                {#each visibleRepos() as repo (repo.full_name)}
                   <button
                     class="dropdown-item"
                     class:selected={selectedRepo?.full_name === repo.full_name}
@@ -210,13 +251,14 @@
                     {/if}
                   </button>
                 {/each}
-                {#if filteredRepos.length > 50}
-                  <div class="dropdown-footer">Showing 50 of {filteredRepos.length} repos</div>
+                <div bind:this={sentinelRef} class="sentinel"></div>
+                {#if hasMore()}
+                  <div class="dropdown-footer">{visibleRepos().length} of {filteredRepos().length}</div>
                 {/if}
               </div>
             {/if}
 
-            {#if showDropdown && searchQuery && filteredRepos.length === 0 && !loadingRepos}
+            {#if showDropdown && searchQuery && filteredRepos().length === 0 && !loadingRepos}
               <div class="dropdown">
                 <div class="dropdown-empty">No repos found</div>
               </div>
@@ -403,15 +445,11 @@
     border-radius: 8px;
     padding: 0 10px;
     transition: border-color 0.15s;
+    color: var(--text-secondary);
   }
 
   .search-input-wrapper:focus-within {
     border-color: var(--accent);
-  }
-
-  .search-icon {
-    color: var(--text-secondary);
-    flex-shrink: 0;
   }
 
   .search-input {
@@ -442,12 +480,6 @@
     background-color: var(--bg-tertiary);
   }
 
-  .chevron {
-    color: var(--text-secondary);
-    flex-shrink: 0;
-    transition: transform 0.15s;
-  }
-
   .dropdown {
     position: absolute;
     top: 100%;
@@ -458,9 +490,12 @@
     border: 1px solid var(--border);
     border-radius: 8px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-    max-height: 200px;
-    overflow-y: auto;
     z-index: 10;
+  }
+
+  .dropdown-scroll {
+    max-height: 220px;
+    overflow-y: auto;
   }
 
   .dropdown-item {
@@ -468,7 +503,7 @@
     align-items: center;
     gap: 8px;
     width: 100%;
-    padding: 10px 12px;
+    padding: 8px 12px;
     font-size: 13px;
     text-align: left;
     background: transparent;
@@ -507,7 +542,7 @@
   }
 
   .dropdown-footer {
-    padding: 8px 12px;
+    padding: 6px 12px;
     font-size: 11px;
     color: var(--text-secondary);
     text-align: center;
@@ -519,6 +554,10 @@
     font-size: 13px;
     color: var(--text-secondary);
     text-align: center;
+  }
+
+  .sentinel {
+    height: 1px;
   }
 
   .loading-repos {

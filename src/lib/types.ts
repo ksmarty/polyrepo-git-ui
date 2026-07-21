@@ -45,8 +45,6 @@ export interface PullRequest {
   body: string | null;
   author: string | null;
   requested_reviewers: string[];
-  approved_reviews: number;
-  required_reviews: number;
 }
 
 export interface GitHubAuth {
@@ -63,4 +61,5 @@ export interface AppConfig {
   fetch_interval_seconds: number;
   sidebar_width: number;
   pr_density: 'compact' | 'relaxed';
+  minimize_on_close: boolean;
 }

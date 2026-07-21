@@ -33,8 +33,6 @@ pub async fn get_prs(token: &str, owner: &str, name: &str, repo_id: &str, state:
         .await
         .map_err(|e| format!("Failed to parse PRs: {}", e))?;
 
-    let required_reviews = get_required_review_count(&client, token, owner, name).await;
-
     let mut result = Vec::new();
     for pr in &prs_json {
         let draft = pr["draft"].as_bool().unwrap_or(false);
@@ -71,8 +69,6 @@ pub async fn get_prs(token: &str, owner: &str, name: &str, repo_id: &str, state:
             })
             .unwrap_or_default();
 
-        let approved_reviews = get_approved_review_count(&client, token, owner, name, number).await;
-
         result.push(PullRequest {
             id: format!("{}/{}/{}", owner, name, number),
             number,
@@ -90,8 +86,6 @@ pub async fn get_prs(token: &str, owner: &str, name: &str, repo_id: &str, state:
             body,
             author,
             requested_reviewers,
-            approved_reviews,
-            required_reviews,
         });
     }
 
@@ -131,206 +125,6 @@ async fn get_combined_status(client: &Client, token: &str, statuses_url: &str) -
     } else {
         "pending".to_string()
     }
-}
-
-async fn get_required_review_count(client: &Client, token: &str, owner: &str, name: &str) -> u32 {
-    // First, try the rulesets API (used by repos with GitHub Rulesets)
-    if let Some(count) = get_required_review_count_from_rulesets(client, token, owner, name).await {
-        return count;
-    }
-
-    // Fallback: get default branch from repo metadata, then try old branch protection API
-    let default_branch = get_default_branch(client, token, owner, name).await;
-    let branches_to_try: Vec<&str> = if let Some(ref branch) = default_branch {
-        vec![branch.as_str(), "main", "master"]
-    } else {
-        vec!["main", "master"]
-    };
-
-    for branch in branches_to_try {
-        let url = format!("{}/repos/{}/{}/branches/{}/protection/required_pull_request_reviews", GITHUB_API_BASE, owner, name, branch);
-
-        // Try unauthenticated first (works for public repos)
-        let response = client
-            .get(&url)
-            .header("User-Agent", "polyrepo-git-ui")
-            .header("Accept", "application/vnd.github+json")
-            .send()
-            .await;
-
-        let response = match response {
-            Ok(r) if r.status().is_success() => Some(r),
-            _ => {
-                client
-                    .get(&url)
-                    .bearer_auth(token)
-                    .header("User-Agent", "polyrepo-git-ui")
-                    .header("Accept", "application/vnd.github+json")
-                    .send()
-                    .await
-                    .ok()
-            }
-        };
-
-        if let Some(r) = response {
-            let data: Value = r.json().await.unwrap_or_default();
-            if let Some(count) = data["required_approving_review_count"].as_u64() {
-                return count as u32;
-            }
-        }
-    }
-
-    0
-}
-
-async fn get_default_branch(client: &Client, token: &str, owner: &str, name: &str) -> Option<String> {
-    let url = format!("{}/repos/{}/{}/branches/main", GITHUB_API_BASE, owner, name);
-    let response = client
-        .get(&url)
-        .bearer_auth(token)
-        .header("User-Agent", "polyrepo-git-ui")
-        .header("Accept", "application/vnd.github+json")
-        .send()
-        .await
-        .ok()?;
-
-    if response.status().is_success() {
-        return Some("main".to_string());
-    }
-
-    let url = format!("{}/repos/{}/{}/branches/master", GITHUB_API_BASE, owner, name);
-    let response = client
-        .get(&url)
-        .bearer_auth(token)
-        .header("User-Agent", "polyrepo-git-ui")
-        .header("Accept", "application/vnd.github+json")
-        .send()
-        .await
-        .ok()?;
-
-    if response.status().is_success() {
-        return Some("master".to_string());
-    }
-
-    None
-}
-
-async fn get_required_review_count_from_rulesets(client: &Client, token: &str, owner: &str, name: &str) -> Option<u32> {
-    let url = format!("{}/repos/{}/{}/rulesets", GITHUB_API_BASE, owner, name);
-
-    // Try unauthenticated first (works for public repos, avoids 403 from missing admin permission)
-    let response = client
-        .get(&url)
-        .header("User-Agent", "polyrepo-git-ui")
-        .header("Accept", "application/vnd.github+json")
-        .send()
-        .await
-        .ok();
-
-    // Fall back to authenticated if unauthenticated fails (private repos)
-    let response = match response {
-        Some(r) if r.status().is_success() => r,
-        _ => {
-            client
-                .get(&url)
-                .bearer_auth(token)
-                .header("User-Agent", "polyrepo-git-ui")
-                .header("Accept", "application/vnd.github+json")
-                .send()
-                .await
-                .ok()?
-        }
-    };
-
-    if !response.status().is_success() {
-        return None;
-    }
-
-    let rulesets: Vec<Value> = response.json().await.unwrap_or_default();
-
-    for ruleset in &rulesets {
-        if ruleset["enforcement"].as_str() != Some("active") {
-            continue;
-        }
-
-        let includes = ruleset["conditions"]["ref_name"]["include"]
-            .as_array()
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-
-        let is_default_branch_rule = includes.iter().any(|pattern| pattern == "~DEFAULT_BRANCH");
-        if !is_default_branch_rule {
-            continue;
-        }
-
-        // Fetch the individual ruleset to get the rules array
-        if let Some(id) = ruleset["id"].as_u64() {
-            let detail_url = format!("{}/repos/{}/{}/rulesets/{}", GITHUB_API_BASE, owner, name, id);
-
-            // Try unauthenticated first for the detail endpoint too
-            let detail_resp = client
-                .get(&detail_url)
-                .header("User-Agent", "polyrepo-git-ui")
-                .header("Accept", "application/vnd.github+json")
-                .send()
-                .await;
-
-            let detail_resp = match detail_resp {
-                Ok(r) if r.status().is_success() => Some(r),
-                _ => {
-                    client
-                        .get(&detail_url)
-                        .bearer_auth(token)
-                        .header("User-Agent", "polyrepo-git-ui")
-                        .header("Accept", "application/vnd.github+json")
-                        .send()
-                        .await
-                        .ok()
-                }
-            };
-
-            if let Some(detail_resp) = detail_resp {
-                if let Ok(detail) = detail_resp.json::<Value>().await {
-                    if let Some(rules) = detail["rules"].as_array() {
-                        for rule in rules {
-                            if rule["type"].as_str() == Some("pull_request") {
-                                if let Some(count) = rule["parameters"]["required_approving_review_count"].as_u64() {
-                                    return Some(count as u32);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    None
-}
-
-async fn get_approved_review_count(client: &Client, token: &str, owner: &str, name: &str, pr_number: u32) -> u32 {
-    let url = format!("{}/repos/{}/{}/pulls/{}/reviews", GITHUB_API_BASE, owner, name, pr_number);
-    let response = client
-        .get(&url)
-        .bearer_auth(token)
-        .header("User-Agent", "polyrepo-git-ui")
-        .header("Accept", "application/vnd.github+json")
-        .send()
-        .await;
-
-    let reviews: Vec<Value> = match response {
-        Ok(r) => r.json().await.unwrap_or_default(),
-        Err(_) => return 0,
-    };
-
-    reviews
-        .iter()
-        .filter(|r| r["state"].as_str() == Some("APPROVED"))
-        .count() as u32
 }
 
 pub async fn sync_pr(token: &str, pr_id: &str, use_rebase: bool) -> Result<(), String> {

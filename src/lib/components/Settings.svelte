@@ -25,6 +25,7 @@
     fetch_interval_seconds: 300,
     sidebar_width: 300,
     pr_density: 'compact',
+    minimize_on_close: true,
   });
 
   let repos: Repository[] = $state([]);
@@ -276,6 +277,18 @@
             <option value="relaxed">Relaxed</option>
           </select>
           <p class="hint">Controls spacing in the pull request list</p>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              bind:checked={config.minimize_on_close}
+              onchange={scheduleSave}
+            />
+            Minimize on close
+          </label>
+          <p class="hint">When closing the window, minimize instead of quitting</p>
         </div>
 
         <div class="form-group">

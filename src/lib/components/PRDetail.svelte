@@ -126,16 +126,6 @@
         </div>
       {/if}
 
-      {#if pr.required_reviews > 0}
-        <div class="pr-info-row">
-          <span class="info-label">Approvals</span>
-          <span class="status-chip review-count" class:review-complete={pr.approved_reviews >= pr.required_reviews}>
-            <CheckCircle size={12} />
-            {pr.approved_reviews}/{pr.required_reviews}
-          </span>
-        </div>
-      {/if}
-
       {#if pr.requested_reviewers.length > 0}
         <div class="pr-info-row">
           <span class="info-label">
@@ -342,23 +332,6 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-  }
-
-  .status-chip.review-count {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    background-color: rgba(249, 188, 96, 0.15);
-    color: var(--warning);
-  }
-
-  .status-chip.review-count :global(svg) {
-    color: inherit;
-  }
-
-  .status-chip.review-count.review-complete {
-    background-color: rgba(44, 182, 125, 0.15);
-    color: var(--success);
   }
 
   .pr-description {

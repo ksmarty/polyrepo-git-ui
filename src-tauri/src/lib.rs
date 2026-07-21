@@ -682,6 +682,19 @@ pub fn run() {
             });
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let should_minimize = {
+                    let state = window.state::<AppState>();
+                    let config = state.config.blocking_lock();
+                    config.app_config.minimize_on_close
+                };
+                if should_minimize {
+                    api.prevent_close();
+                    let _ = window.minimize();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             get_repos,
             add_repo,

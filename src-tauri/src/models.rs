@@ -51,8 +51,6 @@ pub struct PullRequest {
     pub body: Option<String>,
     pub author: Option<String>,
     pub requested_reviewers: Vec<String>,
-    pub approved_reviews: u32,
-    pub required_reviews: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -6,7 +6,7 @@ class AppState {
   repos: Repository[] = $state([]);
   groups: RepoGroup[] = $state([]);
   selectedRepo: Repository | null = $state(null);
-  config: AppConfig = $state({ default_branch: 'main', default_repo_location: '', theme: 'midnight', auto_fetch_on_open: true, fetch_interval_seconds: 300, sidebar_width: 300, pr_density: 'compact' });
+  config: AppConfig = $state({ default_branch: 'main', default_repo_location: '', theme: 'midnight', auto_fetch_on_open: true, fetch_interval_seconds: 300, sidebar_width: 300, pr_density: 'compact', minimize_on_close: true });
   gitLog: GitLogEntry[] = $state([]);
   gitStatus: GitStatus | null = $state(null);
   loadingGitLog: boolean = $state(false);

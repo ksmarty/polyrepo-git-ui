@@ -153,17 +153,26 @@
 
     <div class="permissions-info">
       <h4>Token Types</h4>
-      <p><strong>Fine-grained tokens</strong> (recommended) — Scoped to specific repos. No SSO authorization needed. Create one at <a href="https://github.com/settings/tokens?type=beta" target="_blank">github.com/settings/tokens <ExternalLink size={12} /></a></p>
-      <table>
-        <thead><tr><th>Permission</th><th>Access Level</th></tr></thead>
-        <tbody>
-          <tr><td>Contents</td><td>Read and Write</td></tr>
-          <tr><td>Pull requests</td><td>Read and Write</td></tr>
-          <tr><td>Metadata</td><td>Read-only</td></tr>
-          <tr><td>Commit statuses</td><td>Read-only</td></tr>
-        </tbody>
-      </table>
-      <p style="margin-top: 12px;"><strong>Classic tokens</strong> — Broader access. If your organization uses SAML SSO, you must authorize the token: <a href="https://github.com/settings/tokens" target="_blank">Settings > Tokens <ExternalLink size={12} /></a> > click <em>Configure SSO</em> next to your token > <em>Authorize</em>.</p>
+      <div class="token-type">
+        <h5>Fine-grained (recommended)</h5>
+        <p>Scoped to specific repos. No SSO authorization needed.</p>
+        <table>
+          <thead><tr><th>Permission</th><th>Access Level</th></tr></thead>
+          <tbody>
+            <tr><td>Contents</td><td>Read and Write</td></tr>
+            <tr><td>Pull requests</td><td>Read and Write</td></tr>
+            <tr><td>Metadata</td><td>Read-only</td></tr>
+            <tr><td>Commit statuses</td><td>Read-only</td></tr>
+          </tbody>
+        </table>
+        <p><a href="https://github.com/settings/tokens?type=beta" target="_blank">Create fine-grained token <ExternalLink size={12} /></a></p>
+      </div>
+      <div class="token-type">
+        <h5>Classic</h5>
+        <p>Broader access. If your org uses SAML SSO, you must authorize the token for SSO after creating it.</p>
+        <p class="sso-steps">Settings > Tokens > <em>Configure SSO</em> > Authorize</p>
+        <p><a href="https://github.com/settings/tokens" target="_blank">Create classic token <ExternalLink size={12} /></a></p>
+      </div>
     </div>
   {/if}
 </div>
@@ -379,5 +388,37 @@
   th {
     color: var(--text-secondary);
     font-weight: 500;
+  }
+
+  .token-type {
+    margin-bottom: 16px;
+  }
+
+  .token-type:last-child {
+    margin-bottom: 0;
+  }
+
+  .token-type h5 {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .token-type p {
+    margin-bottom: 8px;
+  }
+
+  .token-type p:last-child {
+    margin-bottom: 0;
+  }
+
+  .sso-steps {
+    font-size: 12px;
+    font-family: monospace;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    padding: 6px 10px;
+    border-radius: 6px;
+    margin-top: 4px;
   }
 </style>

@@ -183,7 +183,7 @@
   .auth-setup { max-width: 500px; }
 
   @media (min-width: 900px) {
-    .auth-setup { max-width: 800px; }
+    .auth-setup { max-width: 100%; }
   }
 
   h3 {

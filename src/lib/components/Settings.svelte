@@ -24,6 +24,7 @@
     auto_fetch_on_open: true,
     fetch_interval_seconds: 300,
     sidebar_width: 300,
+    pr_density: 'compact',
   });
 
   let repos: Repository[] = $state([]);
@@ -266,6 +267,15 @@
             min="60"
             max="3600"
           />
+        </div>
+
+        <div class="form-group">
+          <label for="pr-density">PR Density</label>
+          <select id="pr-density" bind:value={config.pr_density} onchange={scheduleSave}>
+            <option value="compact">Compact</option>
+            <option value="relaxed">Relaxed</option>
+          </select>
+          <p class="hint">Controls spacing in the pull request list</p>
         </div>
 
         <div class="form-group">

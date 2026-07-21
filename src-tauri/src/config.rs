@@ -13,6 +13,12 @@ pub struct AppConfig {
     pub auto_fetch_on_open: bool,
     pub fetch_interval_seconds: u32,
     pub sidebar_width: u32,
+    #[serde(default = "default_pr_density")]
+    pub pr_density: String,
+}
+
+fn default_pr_density() -> String {
+    "compact".to_string()
 }
 
 impl Default for AppConfig {
@@ -27,6 +33,7 @@ impl Default for AppConfig {
             auto_fetch_on_open: true,
             fetch_interval_seconds: 300,
             sidebar_width: 300,
+            pr_density: "compact".to_string(),
         }
     }
 }
@@ -111,6 +118,7 @@ mod tests {
         assert!(config.auto_fetch_on_open);
         assert_eq!(config.fetch_interval_seconds, 300);
         assert_eq!(config.sidebar_width, 300);
+        assert_eq!(config.pr_density, "compact");
     }
 
     #[test]
@@ -122,6 +130,7 @@ mod tests {
             auto_fetch_on_open: false,
             fetch_interval_seconds: 600,
             sidebar_width: 350,
+            pr_density: "relaxed".to_string(),
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -133,6 +142,7 @@ mod tests {
         assert!(!deserialized.auto_fetch_on_open);
         assert_eq!(deserialized.fetch_interval_seconds, 600);
         assert_eq!(deserialized.sidebar_width, 350);
+        assert_eq!(deserialized.pr_density, "relaxed");
     }
 
     #[test]

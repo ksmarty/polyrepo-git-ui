@@ -609,13 +609,17 @@
   }
 
   .folder-select {
-    padding: 4px 8px;
+    padding: 4px 24px 4px 8px;
     font-size: 12px;
     background-color: var(--bg-tertiary);
     color: var(--text-primary);
     border: 1px solid var(--border);
     border-radius: 4px;
     cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 6px center;
   }
 
   .folder-select:hover {

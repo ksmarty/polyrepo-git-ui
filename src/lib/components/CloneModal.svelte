@@ -253,7 +253,10 @@
                 {/each}
                 <div bind:this={sentinelRef} class="sentinel"></div>
                 {#if hasMore()}
-                  <div class="dropdown-footer">{visibleRepos().length} of {filteredRepos().length}</div>
+                  <div class="dropdown-footer">
+                    <Loader2 size={12} class="spin" />
+                    {visibleRepos().length} of {filteredRepos().length}
+                  </div>
                 {/if}
               </div>
             {/if}

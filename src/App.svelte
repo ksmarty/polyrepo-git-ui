@@ -466,126 +466,125 @@
                 </div>
               </div>
 
-              {#if app.gitStatus && (app.gitStatus.staged.length > 0 || app.gitStatus.unstaged.length > 0)}
-                <div class="repo-card">
-                  <div class="file-changes">
-                    <h3 class="section-title">
-                      <FileDiff size={14} />
-                      Changes
-                      {#if app.gitStatus.merge_in_progress}
-                        <span class="merge-tag">MERGING</span>
-                      {/if}
-                    </h3>
-                    <div class="file-changes-split">
-                      {#if app.gitStatus.unstaged.length > 0}
-                        <div class="file-group">
-                          <span class="file-group-label">Unstaged</span>
-                          {#each app.gitStatus.unstaged as file (file.path)}
-                            <div class="file-row clickable" onclick={() => { app.loadDiff(app.selectedRepo!.id, file.path, false); showDiffModal = true; }}>
-                              <span class="file-change-tag unstaged">{file.change}</span>
-                              <span class="file-path">{file.path}</span>
-                              {#if file.change === 'U'}
-                                <button
-                                  class="file-action-btn accept"
-                                  onclick={(e) => { e.stopPropagation(); app.resolveFileConflict(app.selectedRepo!.id, file.path, 'ours'); }}
-                                  title="Accept ours"
-                                >
-                                  <CheckCircle size={12} />
-                                </button>
-                                <button
-                                  class="file-action-btn accept"
-                                  onclick={(e) => { e.stopPropagation(); app.resolveFileConflict(app.selectedRepo!.id, file.path, 'theirs'); }}
-                                  title="Accept theirs"
-                                >
-                                  <XCircle size={12} />
-                                </button>
-                              {:else}
-                                <button
-                                  class="file-action-btn"
-                                  onclick={(e) => { e.stopPropagation(); app.stageFile(app.selectedRepo!.id, file.path); }}
-                                  title="Stage"
-                                >
-                                  <ArrowRightLeft size={12} />
-                                </button>
-                                <button
-                                  class="file-action-btn danger"
-                                  onclick={(e) => { e.stopPropagation(); app.discardFile(app.selectedRepo!.id, file.path); }}
-                                  title="Discard changes"
-                                >
-                                  <X size={12} />
-                                </button>
-                              {/if}
-                            </div>
-                          {/each}
-                        </div>
-                      {/if}
-                      {#if app.gitStatus.staged.length > 0}
-                        <div class="file-group">
-                          <span class="file-group-label">Staged</span>
-                          {#each app.gitStatus.staged as file (file.path)}
-                            <div class="file-row clickable" onclick={() => { app.loadDiff(app.selectedRepo!.id, file.path, true); showDiffModal = true; }}>
-                              <span class="file-change-tag staged">{file.change}</span>
-                              <span class="file-path">{file.path}</span>
+              <div class="repo-card" class:hidden={!app.gitStatus || (app.gitStatus.staged.length === 0 && app.gitStatus.unstaged.length === 0)}>
+                <div class="file-changes">
+                  <h3 class="section-title">
+                    <FileDiff size={14} />
+                    Changes
+                    {#if app.gitStatus?.merge_in_progress}
+                      <span class="merge-tag">MERGING</span>
+                    {/if}
+                  </h3>
+                  <div class="file-changes-split">
+                    {#if app.gitStatus && app.gitStatus.unstaged.length > 0}
+                      <div class="file-group">
+                        <span class="file-group-label">Unstaged</span>
+                        {#each app.gitStatus.unstaged as file (file.path)}
+                          <div class="file-row clickable" onclick={() => { app.loadDiff(app.selectedRepo!.id, file.path, false); showDiffModal = true; }}>
+                            <span class="file-change-tag unstaged">{file.change}</span>
+                            <span class="file-path">{file.path}</span>
+                            {#if file.change === 'U'}
+                              <button
+                                class="file-action-btn accept"
+                                onclick={(e) => { e.stopPropagation(); app.resolveFileConflict(app.selectedRepo!.id, file.path, 'ours'); }}
+                                title="Accept ours"
+                              >
+                                <CheckCircle size={12} />
+                              </button>
+                              <button
+                                class="file-action-btn accept"
+                                onclick={(e) => { e.stopPropagation(); app.resolveFileConflict(app.selectedRepo!.id, file.path, 'theirs'); }}
+                                title="Accept theirs"
+                              >
+                                <XCircle size={12} />
+                              </button>
+                            {:else}
                               <button
                                 class="file-action-btn"
-                                onclick={(e) => { e.stopPropagation(); app.unstageFile(app.selectedRepo!.id, file.path); }}
-                                title="Unstage"
+                                onclick={(e) => { e.stopPropagation(); app.stageFile(app.selectedRepo!.id, file.path); }}
+                                title="Stage"
+                              >
+                                <ArrowRightLeft size={12} />
+                              </button>
+                              <button
+                                class="file-action-btn danger"
+                                onclick={(e) => { e.stopPropagation(); app.discardFile(app.selectedRepo!.id, file.path); }}
+                                title="Discard changes"
                               >
                                 <X size={12} />
                               </button>
-                            </div>
-                          {/each}
-                        </div>
-                      {/if}
-                    </div>
+                            {/if}
+                          </div>
+                        {/each}
+                      </div>
+                    {/if}
+                    {#if app.gitStatus && app.gitStatus.staged.length > 0}
+                      <div class="file-group">
+                        <span class="file-group-label">Staged</span>
+                        {#each app.gitStatus.staged as file (file.path)}
+                          <div class="file-row clickable" onclick={() => { app.loadDiff(app.selectedRepo!.id, file.path, true); showDiffModal = true; }}>
+                            <span class="file-change-tag staged">{file.change}</span>
+                            <span class="file-path">{file.path}</span>
+                            <button
+                              class="file-action-btn"
+                              onclick={(e) => { e.stopPropagation(); app.unstageFile(app.selectedRepo!.id, file.path); }}
+                              title="Unstage"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        {/each}
+                      </div>
+                    {/if}
+                  </div>
 
-                    <div class="commit-area">
-                      <div class="stage-all-actions">
-                        <button class="small-btn" onclick={() => app.stageAll(app.selectedRepo!.id)}>
-                          Stage All
-                        </button>
-                        <button class="small-btn" onclick={() => app.stashRepo(app.selectedRepo!.id)}>
-                          <SquareStack size={12} />
-                          Stash
-                        </button>
-                      </div>
-                      <div class="commit-input-row">
-                        <input
-                          class="commit-input"
-                          type="text"
-                          bind:value={commitMessage}
-                          placeholder="Commit message..."
-                          onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleCommit(); } }}
-                        />
-                        <button
-                          class="commit-btn"
-                          onclick={handleCommit}
-                          disabled={committing || !commitMessage.trim()}
-                        >
-                          {committing ? '...' : 'Commit'}
-                        </button>
-                      </div>
-                      {#if app.gitStatus.merge_in_progress && !app.gitStatus.has_conflicts}
-                        <button
-                          class="continue-merge-btn"
-                          onclick={() => app.continueMerge(app.selectedRepo!.id)}
-                        >
-                          Complete Merge
-                        </button>
-                      {/if}
+                  <div class="commit-area">
+                    <div class="stage-all-actions">
+                      <button class="small-btn" onclick={() => app.stageAll(app.selectedRepo!.id)}>
+                        Stage All
+                      </button>
+                      <button class="small-btn" onclick={() => app.stashRepo(app.selectedRepo!.id)}>
+                        <SquareStack size={12} />
+                        Stash
+                      </button>
                     </div>
+                    <div class="commit-input-row">
+                      <input
+                        class="commit-input"
+                        type="text"
+                        bind:value={commitMessage}
+                        placeholder="Commit message..."
+                        onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleCommit(); } }}
+                      />
+                      <button
+                        class="commit-btn"
+                        onclick={handleCommit}
+                        disabled={committing || !commitMessage.trim()}
+                      >
+                        {committing ? '...' : 'Commit'}
+                      </button>
+                    </div>
+                    {#if app.gitStatus?.merge_in_progress && !app.gitStatus.has_conflicts}
+                      <button
+                        class="continue-merge-btn"
+                        onclick={() => app.continueMerge(app.selectedRepo!.id)}
+                      >
+                        Complete Merge
+                      </button>
+                    {/if}
                   </div>
                 </div>
-              {/if}
+              </div>
 
-              {#if app.selectedRepo.github_owner && app.selectedRepo.github_repo}
+              {#if true}
                 {@const repoPrs = app.prs.filter(pr => pr.repo_id === app.selectedRepo!.id)}
-                {#if repoPrs.length > 0}
-                  <div class="repo-card">
-                    <div class="repo-prs">
-                      <h3 class="section-title">
-                        <GitPullRequest size={14} />
-                        Pull Requests
+                {@const hasGithub = !!(app.selectedRepo.github_owner && app.selectedRepo.github_repo)}
+                <div class="repo-card" class:hidden={!hasGithub || repoPrs.length === 0}>
+                  <div class="repo-prs">
+                    <h3 class="section-title">
+                      <GitPullRequest size={14} />
+                      Pull Requests
+                      {#if hasGithub}
                         <a
                           class="view-all-link"
                           href="https://github.com/{app.selectedRepo.github_owner}/{app.selectedRepo.github_repo}/pulls"
@@ -594,28 +593,28 @@
                           View all on GitHub
                           <ExternalLink size={10} />
                         </a>
-                      </h3>
-                      <div class="repo-pr-list">
-                        {#each repoPrs as pr (pr.id)}
-                          <div class="repo-pr-row clickable" onclick={() => selectedPr = pr}>
-                            <span class="repo-pr-status" class:success={pr.checks_status === 'success'} class:failure={pr.checks_status === 'failure'} class:pending={pr.checks_status === 'pending'}></span>
-                            <span class="repo-pr-number">#{pr.number}</span>
-                            <span class="repo-pr-title">{pr.title}</span>
-                            {#if pr.html_url}
-                              <button
-                                class="repo-pr-link"
-                                onclick={(e) => { e.stopPropagation(); openUrl(pr.html_url); }}
-                                title="Open in GitHub"
-                              >
-                                <ExternalLink size={12} />
-                              </button>
-                            {/if}
-                          </div>
-                        {/each}
-                      </div>
+                      {/if}
+                    </h3>
+                    <div class="repo-pr-list">
+                      {#each repoPrs as pr (pr.id)}
+                        <div class="repo-pr-row clickable" onclick={() => selectedPr = pr}>
+                          <span class="repo-pr-status" class:success={pr.checks_status === 'success'} class:failure={pr.checks_status === 'failure'} class:pending={pr.checks_status === 'pending'}></span>
+                          <span class="repo-pr-number">#{pr.number}</span>
+                          <span class="repo-pr-title">{pr.title}</span>
+                          {#if pr.html_url}
+                            <button
+                              class="repo-pr-link"
+                              onclick={(e) => { e.stopPropagation(); openUrl(pr.html_url); }}
+                              title="Open in GitHub"
+                            >
+                              <ExternalLink size={12} />
+                            </button>
+                          {/if}
+                        </div>
+                      {/each}
                     </div>
                   </div>
-                {/if}
+                </div>
               {/if}
 
               <div class="repo-card">
@@ -1100,6 +1099,10 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+  }
+
+  .hidden {
+    display: none !important;
   }
 
   .repo-card {

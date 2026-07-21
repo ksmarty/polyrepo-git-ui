@@ -553,27 +553,6 @@
     opacity: 0.7;
   }
 
-  .add-row {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 16px;
-  }
-
-  .add-row input {
-    flex: 1;
-  }
-
-  .accent-btn {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    background-color: var(--accent);
-    color: white;
-    padding: 8px 16px;
-    font-weight: 600;
-    white-space: nowrap;
-  }
-
   .secondary-btn {
     background-color: var(--bg-tertiary);
     color: var(--text-primary);
@@ -583,22 +562,6 @@
 
   .secondary-btn:hover {
     background-color: var(--border);
-  }
-
-  .import-btn {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    background-color: var(--bg-tertiary);
-    color: var(--text-primary);
-    padding: 8px 12px;
-    font-weight: 500;
-    white-space: nowrap;
-    border: 1px dashed var(--border);
-  }
-  .import-btn:hover {
-    background-color: var(--border);
-    border-color: var(--text-secondary);
   }
 
   .item-list {

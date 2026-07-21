@@ -5,9 +5,12 @@ use crate::models::PullRequest;
 
 const GITHUB_API_BASE: &str = "https://api.github.com";
 
-pub async fn get_prs(token: &str, owner: &str, name: &str, repo_id: &str, state: &str) -> Result<Vec<PullRequest>, String> {
+pub async fn get_prs(token: &str, owner: &str, name: &str, repo_id: &str, state: &str, assignee: Option<&str>) -> Result<Vec<PullRequest>, String> {
     let client = Client::new();
-    let prs_url = format!("{}/repos/{}/{}/pulls?state={}&per_page=50", GITHUB_API_BASE, owner, name, state);
+    let mut prs_url = format!("{}/repos/{}/{}/pulls?state={}&per_page=50", GITHUB_API_BASE, owner, name, state);
+    if let Some(user) = assignee {
+        prs_url.push_str(&format!("&assignee={}", user));
+    }
 
     let response = client
         .get(&prs_url)

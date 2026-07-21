@@ -55,7 +55,7 @@
     error = null;
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('set_github_pat', { token: patToken, user: patUser || null });
+      await invoke('set_github_pat', { token: patToken, user: null });
       success = 'PAT saved successfully';
       patToken = '';
       await loadAuth();
@@ -143,9 +143,8 @@
           <KeyRound size={20} />
           <h4>Personal Access Token</h4>
         </div>
-        <p>Use a fine-grained PAT for enterprise environments or when OAuth isn't available.</p>
+        <p>Use a classic or fine-grained PAT for enterprise environments or when OAuth isn't available.</p>
         <div class="pat-form">
-          <input type="text" bind:value={patUser} placeholder="GitHub username (optional)" />
           <input type="password" bind:value={patToken} placeholder="ghp_xxxxxxxxxxxx" />
           <button class="save-button" onclick={savePAT} disabled={loading || !patToken}>Save Token</button>
         </div>
@@ -153,8 +152,8 @@
     </div>
 
     <div class="permissions-info">
-      <h4>Required PAT Permissions</h4>
-      <p>Create a fine-grained token at <a href="https://github.com/settings/tokens?type=beta" target="_blank">github.com/settings/tokens <ExternalLink size={12} /></a></p>
+      <h4>Token Types</h4>
+      <p><strong>Fine-grained tokens</strong> (recommended) — Scoped to specific repos. No SSO authorization needed. Create one at <a href="https://github.com/settings/tokens?type=beta" target="_blank">github.com/settings/tokens <ExternalLink size={12} /></a></p>
       <table>
         <thead><tr><th>Permission</th><th>Access Level</th></tr></thead>
         <tbody>
@@ -164,6 +163,7 @@
           <tr><td>Commit statuses</td><td>Read-only</td></tr>
         </tbody>
       </table>
+      <p style="margin-top: 12px;"><strong>Classic tokens</strong> — Broader access. If your organization uses SAML SSO, you must authorize the token: <a href="https://github.com/settings/tokens" target="_blank">Settings > Tokens <ExternalLink size={12} /></a> > click <em>Configure SSO</em> next to your token > <em>Authorize</em>.</p>
     </div>
   {/if}
 </div>

@@ -42,17 +42,36 @@ This runs `svelte-check` for frontend and `cargo check` + `cargo test` for Rust.
 
 You can authenticate with GitHub using either a **Personal Access Token** or **OAuth App**.
 
-### Option 1: Personal Access Token (simpler)
+### Option 1: Fine-grained Token (recommended)
+
+Scoped to specific repos, no SSO authorization needed.
+
+1. Go to [GitHub Settings > Fine-grained tokens](https://github.com/settings/tokens?type=beta)
+2. Click **Generate new token**
+3. Set an expiration and select the repos you want to access
+4. Under **Repository permissions**, grant:
+   - **Contents** — Read and Write
+   - **Pull requests** — Read and Write
+   - **Metadata** — Read-only
+   - **Commit statuses** — Read-only
+5. In the app, go to **Settings > GitHub** and paste the token
+
+### Option 2: Classic Token
+
+Broader access. Requires SSO authorization for SAML-enabled organizations.
 
 1. Go to [GitHub Settings > Developer settings > Personal access tokens](https://github.com/settings/tokens)
 2. Create a new token with these scopes:
    - `repo` — Full control of private repositories
    - `read:org` — Read organization membership
 3. In the app, go to **Settings > GitHub** and paste your token
+4. **If your org uses SAML SSO**: Go back to [Settings > Tokens](https://github.com/settings/tokens), click **Configure SSO** next to your token, and click **Authorize**
 
-### Option 2: OAuth App (recommended, works out of the box)
+### Option 3: OAuth App (works out of the box)
 
 The app includes a bundled OAuth App. Just click **Connect with GitHub** in Settings > GitHub — no setup required.
+
+> **Note**: If your organization uses SAML SSO, an org admin must authorize the OAuth app first at Organization Settings > Member privileges > SSO.
 
 #### For developers: using your own OAuth App
 

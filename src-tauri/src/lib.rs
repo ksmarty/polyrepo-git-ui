@@ -297,7 +297,7 @@ async fn reorder_repos(
 
 #[tauri::command]
 async fn get_all_prs(state: tauri::State<'_, AppState>, state_filter: Option<String>) -> Result<Vec<PullRequest>, String> {
-    let (repos_data, token) = {
+    let (repos_data, token, username) = {
         let config = state.config.lock().await;
         let repos_data: Vec<(String, String, String)> = config
             .repos
@@ -312,16 +312,18 @@ async fn get_all_prs(state: tauri::State<'_, AppState>, state_filter: Option<Str
             })
             .collect();
         let token = config.github_auth.token.clone();
-        (repos_data, token)
+        let username = config.github_auth.user.clone();
+        (repos_data, token, username)
     };
     let token = match token {
         Some(t) => t,
         None => return Ok(Vec::new()),
     };
     let pr_state = state_filter.unwrap_or_else(|| "open".to_string());
+    let assignee = username.as_deref();
     let mut all_prs = Vec::new();
     for (repo_id, owner, name) in repos_data {
-        match github::get_prs(&token, &owner, &name, &repo_id, &pr_state).await {
+        match github::get_prs(&token, &owner, &name, &repo_id, &pr_state, assignee).await {
             Ok(prs) => all_prs.extend(prs),
             Err(e) => {
                 eprintln!("[polyrepo] PR fetch {}/{}: {}", owner, name, e);
@@ -505,11 +507,32 @@ async fn set_github_pat(
     token: String,
     user: Option<String>,
 ) -> Result<(), String> {
+    // If no username provided, fetch it from GitHub
+    let username = match user {
+        Some(u) if !u.is_empty() => Some(u),
+        _ => {
+            let client = reqwest::Client::new();
+            match client
+                .get("https://api.github.com/user")
+                .bearer_auth(&token)
+                .header("User-Agent", "polyrepo-git-ui")
+                .send()
+                .await
+            {
+                Ok(resp) => match resp.json::<serde_json::Value>().await {
+                    Ok(json) => json["login"].as_str().map(|s| s.to_string()),
+                    Err(_) => None,
+                },
+                Err(_) => None,
+            }
+        }
+    };
+
     let mut config = state.config.lock().await;
     config.github_auth = models::GitHubAuth {
         method: Some("pat".to_string()),
         token: Some(token),
-        user,
+        user: username,
     };
     config.save().map_err(|e| e.to_string())?;
     Ok(())

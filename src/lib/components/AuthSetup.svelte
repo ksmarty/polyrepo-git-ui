@@ -293,7 +293,7 @@
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 20px;
-      align-items: start;
+      align-items: stretch;
     }
   }
 
@@ -366,7 +366,6 @@
   }
 
   .permissions-info {
-    margin-top: 20px;
     background-color: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: 10px;

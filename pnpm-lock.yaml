@@ -35,6 +35,9 @@ importers:
       sortablejs:
         specifier: ^1.15.7
         version: 1.15.7
+      svelte-masonry:
+        specifier: ^0.1.5
+        version: 0.1.5(svelte@5.56.5)
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^7.2.0
@@ -48,9 +51,6 @@ importers:
       svelte:
         specifier: ^5.56.5
         version: 5.56.5
-      svelte-bricks:
-        specifier: ^0.5.0
-        version: 0.5.0(svelte@5.56.5)
       svelte-check:
         specifier: ^4.7.3
         version: 4.7.3(picomatch@4.0.5)(svelte@5.56.5)(typescript@5.8.3)
@@ -543,11 +543,6 @@ packages:
     resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
     engines: {node: '>=0.10.0'}
 
-  svelte-bricks@0.5.0:
-    resolution: {integrity: sha512-e/htJ4lifVfFTY5tVTsJ9UjsB5GXJ5BalfJxe3GzmB5x6zQBhMmEb6yYzyw5OoSvNm+6YZexlD8/fUfqe1GUvA==}
-    peerDependencies:
-      svelte: '>=5'
-
   svelte-check@4.7.3:
     resolution: {integrity: sha512-DHdTCGX62R0fCxBEaT+USdASAnoaRBaaNczkRJl0K7o3WyoCeVUbVxo6fKqpOll/B+WMWCsiFK0eFrJSNBKZIg==}
     engines: {node: '>= 18.0.0'}
@@ -555,6 +550,11 @@ packages:
     peerDependencies:
       svelte: ^4.0.0 || ^5.0.0-next.0
       typescript: '>=5.0.0'
+
+  svelte-masonry@0.1.5:
+    resolution: {integrity: sha512-ZMtALHVbvriGcLODSdoeRaI0SvbmNEW6puG/Zs2tUP7hK0e/TLrxGTAAtNDinI/8DJhUJUCnAsP5xsTmebLwbw==}
+    peerDependencies:
+      svelte: ^4.0.0
 
   svelte@5.56.5:
     resolution: {integrity: sha512-P03YJmUy2JoOxYHb4Ka3oFat1hq2ko2it1MOItSjsJ4B6WgZPLc3+RyyU+57OGWhs3Ieq74EJpZtSnNXdAGgDw==}
@@ -1003,10 +1003,6 @@ snapshots:
 
   source-map-js@1.2.1: {}
 
-  svelte-bricks@0.5.0(svelte@5.56.5):
-    dependencies:
-      svelte: 5.56.5
-
   svelte-check@4.7.3(picomatch@4.0.5)(svelte@5.56.5)(typescript@5.8.3):
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
@@ -1019,6 +1015,10 @@ snapshots:
       typescript: 5.8.3
     transitivePeerDependencies:
       - picomatch
+
+  svelte-masonry@0.1.5(svelte@5.56.5):
+    dependencies:
+      svelte: 5.56.5
 
   svelte@5.56.5:
     dependencies:

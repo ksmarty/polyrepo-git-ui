@@ -2,7 +2,7 @@
   import type { PullRequest } from '../types';
   import PRCard from './PRCard.svelte';
   import PRDetail from './PRDetail.svelte';
-  import Masonry from 'svelte-bricks';
+  import Masonry from 'svelte-masonry';
   import { RefreshCw, GitPullRequest, LayoutGrid, List } from '@lucide/svelte';
   import { app } from '../stores.svelte';
 
@@ -142,10 +142,10 @@
     </div>
   {:else}
     <div class="pr-list flat">
-      <Masonry items={getFilteredPRs()} minColWidth={400} gap={10} idKey="id" calcCols={() => 2}>
-        {#snippet children({ item })}
-          <PRCard pr={item} repoName={getRepoName(item.repo_id)} {compact} onSelect={(p) => selectedPr = p} />
-        {/snippet}
+      <Masonry items={getFilteredPRs()} colWidth={'minmax(400px, 1fr)'} gridGap={'10px'}>
+        {#each getFilteredPRs() as pr (pr.id)}
+          <PRCard {pr} repoName={getRepoName(pr.repo_id)} {compact} onSelect={(p) => selectedPr = p} />
+        {/each}
       </Masonry>
     </div>
   {/if}

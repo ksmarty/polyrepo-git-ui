@@ -691,7 +691,7 @@ pub fn run() {
                 };
                 if should_minimize {
                     api.prevent_close();
-                    let _ = window.minimize();
+                    let _ = window.hide();
                 }
             }
         })

@@ -229,9 +229,7 @@
     font-weight: 600;
     color: var(--text-primary);
     margin: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    word-break: break-word;
   }
 
   .modal-close {

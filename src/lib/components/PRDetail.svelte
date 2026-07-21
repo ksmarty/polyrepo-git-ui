@@ -189,7 +189,9 @@
     width: 90vw;
     max-width: 600px;
     max-height: 85vh;
-    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 
   .modal-header {
@@ -198,6 +200,7 @@
     justify-content: space-between;
     padding: 16px 20px;
     border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
   }
 
   .header-title {
@@ -240,6 +243,9 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
   }
 
   .pr-info-row {
@@ -454,6 +460,7 @@
     gap: 8px;
     padding: 12px 20px;
     border-top: 1px solid var(--border);
+    flex-shrink: 0;
   }
 
   .close-btn {

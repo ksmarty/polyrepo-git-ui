@@ -1,9 +1,10 @@
 <script lang="ts">
   import Sidebar from './lib/components/Sidebar.svelte';
   import PRList from './lib/components/PRList.svelte';
+  import PRDetail from './lib/components/PRDetail.svelte';
   import Settings from './lib/components/Settings.svelte';
   import { app } from './lib/stores.svelte';
-  import type { Repository } from './lib/types';
+  import type { Repository, PullRequest } from './lib/types';
   import type { MergeResult } from './lib/tauri';
   import { DiffView, DiffModeEnum } from '@git-diff-view/svelte';
   import '@git-diff-view/svelte/styles/diff-view-pure.css';
@@ -23,6 +24,7 @@
   let mergeTargetBranch: string = $state('');
   let showDiffModal: boolean = $state(false);
   let diffViewMode: 'split' | 'unified' = $state('split');
+  let selectedPr: PullRequest | null = $state(null);
 
   function parseDiffContent(rawDiff: string) {
     if (!rawDiff) return null;
@@ -573,20 +575,20 @@
                           href="https://github.com/{app.selectedRepo.github_owner}/{app.selectedRepo.github_repo}/pulls"
                           onclick={(e) => { e.preventDefault(); openUrl(`https://github.com/${app.selectedRepo!.github_owner}/${app.selectedRepo!.github_repo}/pulls`); }}
                         >
-                          View all
+                          View all on GitHub
                           <ExternalLink size={10} />
                         </a>
                       </h3>
                       <div class="repo-pr-list">
                         {#each repoPrs as pr (pr.id)}
-                          <div class="repo-pr-row">
+                          <div class="repo-pr-row clickable" onclick={() => selectedPr = pr}>
                             <span class="repo-pr-status" class:success={pr.checks_status === 'success'} class:failure={pr.checks_status === 'failure'} class:pending={pr.checks_status === 'pending'}></span>
                             <span class="repo-pr-number">#{pr.number}</span>
                             <span class="repo-pr-title">{pr.title}</span>
                             {#if pr.html_url}
                               <button
                                 class="repo-pr-link"
-                                onclick={() => openUrl(pr.html_url)}
+                                onclick={(e) => { e.stopPropagation(); openUrl(pr.html_url); }}
                                 title="Open in GitHub"
                               >
                                 <ExternalLink size={12} />
@@ -613,10 +615,10 @@
                   {:else}
                     <div class="commit-list">
                       {#each app.gitLog as commit (commit.hash)}
-                        <div class="commit-row" class:expanded={expandedCommit === commit.hash}>
+                        <div class="commit-row clickable" class:expanded={expandedCommit === commit.hash} onclick={() => expandedCommit = expandedCommit === commit.hash ? null : commit.hash}>
                           <button
                             class="commit-expand-btn"
-                            onclick={() => expandedCommit = expandedCommit === commit.hash ? null : commit.hash}
+                            onclick={(e) => { e.stopPropagation(); expandedCommit = expandedCommit === commit.hash ? null : commit.hash; }}
                           >
                             <span class="commit-hash">{commit.short_hash}</span>
                           </button>
@@ -625,7 +627,7 @@
                           {#if getCommitUrl(app.selectedRepo, commit.hash)}
                             <button
                               class="commit-link-btn"
-                              onclick={() => openCommitUrl(commit.hash)}
+                              onclick={(e) => { e.stopPropagation(); openCommitUrl(commit.hash); }}
                               title="View on GitHub"
                             >
                               <ExternalLink size={12} />
@@ -740,11 +742,11 @@
               </div>
             {:else}
               <button class="info-value editable" onclick={() => { editingDefaultBranch = true; newDefaultBranch = app.selectedRepo?.default_branch ?? ''; }}>
-                {app.selectedRepo.default_branch ?? app.config.default_branch}
+                {app.selectedRepo.default_branch ?? 'Not set'}
                 <span class="edit-hint">(click to edit)</span>
               </button>
             {/if}
-            <p class="info-hint">Override the global default branch for this repo</p>
+            <p class="info-hint">Default branch for this repo (auto-detected if not set)</p>
           </div>
         </div>
       </div>
@@ -997,6 +999,14 @@
       </div>
     </div>
   </div>
+{/if}
+
+{#if selectedPr}
+  <PRDetail
+    pr={selectedPr}
+    repoName={selectedPr.repo_name}
+    onClose={() => selectedPr = null}
+  />
 {/if}
 
 <style>
@@ -1390,7 +1400,11 @@
     font-size: 12px;
   }
 
-  .repo-pr-row:hover {
+  .repo-pr-row.clickable {
+    cursor: pointer;
+  }
+
+  .repo-pr-row.clickable:hover {
     background-color: var(--bg-tertiary);
   }
 
@@ -1458,7 +1472,11 @@
     font-size: 12px;
   }
 
-  .commit-row:hover {
+  .commit-row.clickable {
+    cursor: pointer;
+  }
+
+  .commit-row.clickable:hover {
     background-color: var(--bg-tertiary);
   }
 

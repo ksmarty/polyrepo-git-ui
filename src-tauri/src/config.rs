@@ -7,7 +7,6 @@ use crate::models::{GitHubAuth, RepoGroup, Repository};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AppConfig {
-    pub default_branch: String,
     pub default_repo_location: String,
     pub theme: String,
     pub auto_fetch_on_open: bool,
@@ -33,7 +32,6 @@ impl Default for AppConfig {
             .map(|d| d.join("Projects").to_string_lossy().to_string())
             .unwrap_or_else(|| "~/Projects".to_string());
         Self {
-            default_branch: "main".to_string(),
             default_repo_location,
             theme: "midnight".to_string(),
             auto_fetch_on_open: true,
@@ -119,7 +117,6 @@ mod tests {
     #[test]
     fn test_app_config_default() {
         let config = AppConfig::default();
-        assert_eq!(config.default_branch, "main");
         assert!(!config.default_repo_location.is_empty());
         assert_eq!(config.theme, "midnight");
         assert!(config.auto_fetch_on_open);
@@ -132,7 +129,6 @@ mod tests {
     #[test]
     fn test_app_config_serialize_deserialize() {
         let config = AppConfig {
-            default_branch: "develop".to_string(),
             default_repo_location: "/Users/test/Projects".to_string(),
             theme: "midnight".to_string(),
             auto_fetch_on_open: false,
@@ -145,7 +141,6 @@ mod tests {
         let toml_str = toml::to_string_pretty(&config).unwrap();
         let deserialized: AppConfig = toml::from_str(&toml_str).unwrap();
 
-        assert_eq!(deserialized.default_branch, "develop");
         assert_eq!(deserialized.default_repo_location, "/Users/test/Projects");
         assert_eq!(deserialized.theme, "midnight");
         assert!(!deserialized.auto_fetch_on_open);
@@ -185,7 +180,6 @@ mod tests {
         let loaded_content = fs::read_to_string(&config_file).unwrap();
         let loaded: Config = toml::from_str(&loaded_content).unwrap();
 
-        assert_eq!(loaded.app_config.default_branch, "main");
         assert!(loaded.repos.is_empty());
     }
 }

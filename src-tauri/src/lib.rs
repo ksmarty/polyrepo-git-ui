@@ -20,11 +20,7 @@ async fn add_repo(
     path: String,
     group_id: Option<String>,
 ) -> Result<Repository, String> {
-    let default_branch = {
-        let config = state.config.lock().await;
-        config.app_config.default_branch.clone()
-    };
-    let repo = git::add_repo(&path, group_id.as_deref(), Some(&default_branch)).await?;
+    let repo = git::add_repo(&path, group_id.as_deref(), None).await?;
     let mut config = state.config.lock().await;
     config.repos.push(repo.clone());
     config.save().map_err(|e| e.to_string())?;
@@ -44,7 +40,7 @@ async fn refresh_repo(
     state: tauri::State<'_, AppState>,
     id: String,
 ) -> Result<Repository, String> {
-    let (repo_path, repo_default_branch, global_default_branch) = {
+    let (repo_path, repo_default_branch) = {
         let config = state.config.lock().await;
         let repo = config
             .repos
@@ -54,10 +50,9 @@ async fn refresh_repo(
         (
             repo.path.clone(),
             repo.default_branch.clone(),
-            config.app_config.default_branch.clone(),
         )
     };
-    let effective_default_branch = repo_default_branch.as_deref().or(Some(global_default_branch.as_str()));
+    let effective_default_branch = repo_default_branch.as_deref();
     let refreshed = git::refresh_repo(&repo_path, effective_default_branch).await?;
     let mut config = state.config.lock().await;
     if let Some(existing) = config.repos.iter_mut().find(|r| r.id == id) {
@@ -146,7 +141,7 @@ async fn merge_repo(
     state: tauri::State<'_, AppState>,
     id: String,
 ) -> Result<git::MergeResult, String> {
-    let (repo_path, repo_default_branch, global_default_branch) = {
+    let (repo_path, repo_default_branch) = {
         let config = state.config.lock().await;
         let repo = config
             .repos
@@ -156,10 +151,9 @@ async fn merge_repo(
         (
             repo.path.clone(),
             repo.default_branch.clone(),
-            config.app_config.default_branch.clone(),
         )
     };
-    let effective_default_branch = repo_default_branch.as_deref().or(Some(global_default_branch.as_str()));
+    let effective_default_branch = repo_default_branch.as_deref();
     git::merge_repo(&repo_path, effective_default_branch).await
 }
 
@@ -386,14 +380,11 @@ async fn clone_repo(
     url: String,
     path: String,
 ) -> Result<Repository, String> {
-    let (default_branch, token) = {
+    let token = {
         let config = state.config.lock().await;
-        (
-            config.app_config.default_branch.clone(),
-            config.github_auth.token.clone(),
-        )
+        config.github_auth.token.clone()
     };
-    let mut repo = git::clone_repo(&url, &path, Some(&default_branch), token.as_deref()).await?;
+    let mut repo = git::clone_repo(&url, &path, None, token.as_deref()).await?;
 
     // Auto-detect default branch from the cloned repo
     let detected_branch = git::detect_default_branch(std::path::Path::new(&path)).await;

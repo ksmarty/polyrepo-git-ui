@@ -97,10 +97,14 @@
   async function removeRepoFromSidebar() {
     if (!contextMenu) return;
     const id = contextMenu.repoId;
+    const wasSelected = app.selectedRepo?.id === id;
     closeContextMenu();
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       await invoke('remove_repo', { id });
+      if (wasSelected) {
+        app.selectedRepo = null;
+      }
       await app.loadAll();
     } catch (e) {
       console.error('Failed to remove repo:', e);

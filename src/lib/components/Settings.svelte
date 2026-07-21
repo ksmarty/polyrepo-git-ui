@@ -6,7 +6,7 @@
   import AuthSetup from './AuthSetup.svelte';
   import ImportModal from './ImportModal.svelte';
 
-  import { Settings as SettingsIcon, FolderGit2, GitBranch, Trash2, Plus, FolderOpen } from '@lucide/svelte';
+  import { Settings as SettingsIcon, FolderGit2, GitBranch, Trash2, Plus, FolderOpen, Palette } from '@lucide/svelte';
   import { app } from '../stores.svelte';
 
   const dispatch = createEventDispatcher<{
@@ -15,10 +15,9 @@
     authChange: void;
   }>();
 
-  let activeSection: 'general' | 'repos' | 'github' = $state('general');
+  let activeSection: 'general' | 'themes' | 'repos' | 'github' = $state('general');
 
   let config: AppConfig = $state({
-    default_branch: 'main',
     default_repo_location: '',
     theme: 'midnight',
     auto_fetch_on_open: true,
@@ -38,14 +37,13 @@
   let previousTheme: string = $state('');
 
   const themes = [
-    { value: 'system', label: 'System' },
-    { value: 'catppuccin', label: 'Catppuccin' },
-    { value: 'forest', label: 'Corona Forest' },
-    { value: 'ocean', label: 'Fizzy Whirlpool' },
-    { value: 'dark', label: 'Flattered Sugar' },
-    { value: 'solarized', label: 'Midnight Evening' },
-    { value: 'midnight', label: 'Candy Grape' },
-    { value: 'light', label: 'White Piglet' },
+    { value: 'catppuccin', label: 'Catppuccin', colors: { bg: '#1e1e2e', bgSecondary: '#252536', accent: '#f38ba8', text: '#cdd6f4' } },
+    { value: 'forest', label: 'Corona Forest', colors: { bg: '#f2f7f5', bgSecondary: '#e6f0ec', accent: '#00473e', text: '#00473e' } },
+    { value: 'ocean', label: 'Fizzy Whirlpool', colors: { bg: '#004643', bgSecondary: '#005c58', accent: '#f9bc60', text: '#e8e4e6' } },
+    { value: 'dark', label: 'Flattered Sugar', colors: { bg: '#0f0e17', bgSecondary: '#1a1929', accent: '#ff8906', text: '#fffffe' } },
+    { value: 'solarized', label: 'Midnight Evening', colors: { bg: '#232946', bgSecondary: '#2a3050', accent: '#eebbc3', text: '#fffffe' } },
+    { value: 'midnight', label: 'Candy Grape', colors: { bg: '#16161a', bgSecondary: '#1e1e24', accent: '#7f5af0', text: '#fffffe' } },
+    { value: 'light', label: 'White Piglet', colors: { bg: '#fffffe', bgSecondary: '#f2f0ed', accent: '#e53170', text: '#2b2c34' } },
   ];
 
   onMount(async () => {
@@ -133,6 +131,9 @@
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       await invoke('remove_repo', { id });
+      if (app.selectedRepo?.id === id) {
+        app.selectedRepo = null;
+      }
       await loadRepos();
       dispatch('dataChange');
     } catch (e) {
@@ -165,6 +166,11 @@
     }
   }
 
+  function selectTheme(themeValue: string) {
+    config.theme = themeValue;
+    scheduleSave();
+  }
+
   function handleImportComplete() {
     showImportModal = false;
     loadRepos();
@@ -180,6 +186,14 @@
     >
       <SettingsIcon size={16} />
       General
+    </button>
+    <button
+      class="nav-item"
+      class:active={activeSection === 'themes'}
+      onclick={() => activeSection = 'themes'}
+    >
+      <Palette size={16} />
+      Themes
     </button>
     <button
       class="nav-item"
@@ -212,18 +226,6 @@
         <h3>General</h3>
 
         <div class="form-group">
-          <label for="default-branch">Default Branch</label>
-          <input
-            id="default-branch"
-            type="text"
-            bind:value={config.default_branch}
-            oninput={scheduleSave}
-            placeholder="main"
-          />
-          <p class="hint">Fallback branch when no per-repo override is set</p>
-        </div>
-
-        <div class="form-group">
           <label for="default-repo-location">Default Repo Location</label>
           <div class="location-row">
             <input
@@ -236,15 +238,6 @@
             <button class="secondary-btn" onclick={browseRepoLocation}>Browse</button>
           </div>
           <p class="hint">Where new repos are cloned to by default</p>
-        </div>
-
-        <div class="form-group">
-          <label for="theme">Theme</label>
-          <select id="theme" bind:value={config.theme} onchange={scheduleSave}>
-            {#each themes as t}
-              <option value={t.value}>{t.label}</option>
-            {/each}
-          </select>
         </div>
 
         <div class="form-group">
@@ -301,6 +294,45 @@
             </button>
           </div>
           <p class="hint">Configuration is stored as TOML</p>
+        </div>
+      </div>
+
+    {:else if activeSection === 'themes'}
+      <div class="section">
+        <h3>Themes</h3>
+        <div class="theme-grid">
+          {#each themes as theme}
+            <button
+              class="theme-card"
+              class:active={config.theme === theme.value}
+              onclick={() => selectTheme(theme.value)}
+            >
+              <div class="theme-preview" style="background-color: {theme.colors.bg};">
+                <div class="preview-sidebar" style="background-color: {theme.colors.bgSecondary};">
+                  <div class="preview-item" style="background-color: {theme.colors.accent};"></div>
+                  <div class="preview-item" style="background-color: {theme.colors.text}; opacity: 0.3;"></div>
+                  <div class="preview-item" style="background-color: {theme.colors.text}; opacity: 0.3;"></div>
+                </div>
+                <div class="preview-content">
+                  <div class="preview-header" style="background-color: {theme.colors.bgSecondary};">
+                    <div class="preview-dot" style="background-color: {theme.colors.accent};"></div>
+                    <div class="preview-line" style="background-color: {theme.colors.text}; opacity: 0.2;"></div>
+                  </div>
+                  <div class="preview-body">
+                    <div class="preview-line long" style="background-color: {theme.colors.text}; opacity: 0.15;"></div>
+                    <div class="preview-line medium" style="background-color: {theme.colors.text}; opacity: 0.1;"></div>
+                    <div class="preview-card" style="background-color: {theme.colors.bgSecondary}; border-color: {theme.colors.text};">
+                      <div class="preview-line short" style="background-color: {theme.colors.accent};"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <span class="theme-label">{theme.label}</span>
+              {#if config.theme === theme.value}
+                <span class="theme-active-badge">Active</span>
+              {/if}
+            </button>
+          {/each}
         </div>
       </div>
 
@@ -618,5 +650,119 @@
     padding: 0;
     font-size: 16px;
     line-height: 1;
+  }
+
+  .theme-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 16px;
+  }
+
+  .theme-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    background: transparent;
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: border-color 0.2s, transform 0.15s;
+  }
+
+  .theme-card:hover {
+    border-color: var(--text-secondary);
+    transform: translateY(-2px);
+  }
+
+  .theme-card.active {
+    border-color: var(--accent);
+    background-color: rgba(127, 90, 240, 0.05);
+  }
+
+  .theme-preview {
+    width: 100%;
+    height: 100px;
+    border-radius: 8px;
+    display: flex;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .preview-sidebar {
+    width: 35%;
+    padding: 8px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .preview-item {
+    height: 6px;
+    border-radius: 3px;
+    width: 80%;
+  }
+
+  .preview-item:first-child {
+    width: 60%;
+  }
+
+  .preview-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 6px;
+    gap: 6px;
+  }
+
+  .preview-header {
+    height: 12px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 6px;
+  }
+
+  .preview-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  .preview-line {
+    height: 4px;
+    border-radius: 2px;
+  }
+
+  .preview-line.long { width: 90%; }
+  .preview-line.medium { width: 60%; }
+  .preview-line.short { width: 40%; height: 6px; }
+
+  .preview-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .preview-card {
+    border-radius: 4px;
+    padding: 6px;
+    border: 1px solid;
+  }
+
+  .theme-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .theme-active-badge {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
 </style>

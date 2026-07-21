@@ -1,181 +1,113 @@
 use reqwest::Client;
-use serde::Deserialize;
+use serde_json::Value;
 
 use crate::models::PullRequest;
 
 const GITHUB_API_BASE: &str = "https://api.github.com";
-const GITHUB_GRAPHQL_URL: &str = "https://api.github.com/graphql";
-
-#[derive(Debug, Deserialize)]
-struct GraphQLResponse<T> {
-    data: Option<T>,
-    errors: Option<Vec<GraphQLError>>,
-}
-
-#[derive(Debug, Deserialize)]
-struct GraphQLError {
-    message: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct RepositoriesData {
-    repository: RepositoryData,
-}
-
-#[derive(Debug, Deserialize)]
-struct RepositoryData {
-    pull_requests: PullRequestsConnection,
-}
-
-#[derive(Debug, Deserialize)]
-struct PullRequestsConnection {
-    nodes: Vec<GitHubPR>,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(non_snake_case)]
-struct GitHubPR {
-    number: u32,
-    title: String,
-    headRefName: String,
-    baseRefName: String,
-    mergeable: String,
-    reviewDecision: Option<String>,
-    commits: CommitsConnection,
-}
-
-#[derive(Debug, Deserialize)]
-struct CommitsConnection {
-    nodes: Vec<CommitNode>,
-}
-
-#[derive(Debug, Deserialize)]
-struct CommitNode {
-    commit: CommitData,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(non_snake_case)]
-struct CommitData {
-    statusCheckRollup: Option<StatusCheckRollup>,
-}
-
-#[derive(Debug, Deserialize)]
-struct StatusCheckRollup {
-    state: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-struct RestPR {
-    id: String,
-    number: u32,
-    title: String,
-    head: RestBranch,
-    base: RestBranch,
-    state: String,
-    mergeable: Option<String>,
-    draft: bool,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-struct RestBranch {
-    ref_name: String,
-}
 
 pub async fn get_prs(token: &str, owner: &str, name: &str, repo_id: &str) -> Result<Vec<PullRequest>, String> {
-    let query = r#"
-        query RepoPRs($owner: String!, $name: String!) {
-            repository(owner: $owner, name: $name) {
-                pullRequests(first: 50, states: OPEN) {
-                    nodes {
-                        number
-                        title
-                        headRefName
-                        baseRefName
-                        mergeable
-                        reviewDecision
-                        commits(last: 1) {
-                            nodes {
-                                commit {
-                                    statusCheckRollup {
-                                        state
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    "#;
-
     let client = Client::new();
-    let body = serde_json::json!({
-        "query": query,
-        "variables": {
-            "owner": owner,
-            "name": name
-        }
-    });
+    let prs_url = format!("{}/repos/{}/{}/pulls?state=open&per_page=50", GITHUB_API_BASE, owner, name);
 
     let response = client
-        .post(GITHUB_GRAPHQL_URL)
+        .get(&prs_url)
         .bearer_auth(token)
         .header("User-Agent", "polyrepo-git-ui")
-        .json(&body)
+        .header("Accept", "application/vnd.github+json")
         .send()
         .await
         .map_err(|e| format!("Failed to send request: {}", e))?;
 
-    let graphql_response: GraphQLResponse<RepositoriesData> = response
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-    if let Some(errors) = graphql_response.errors {
-        if !errors.is_empty() {
-            return Err(format!("GraphQL error: {}", errors[0].message));
-        }
+    if response.status().as_u16() == 404 {
+        return Ok(vec![]);
     }
 
-    let data = graphql_response
-        .data
-        .ok_or("No data in response")?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("GitHub API error {}: {}", status, &body[..body.len().min(200)]));
+    }
 
-    let prs: Vec<PullRequest> = data
-        .repository
-        .pull_requests
-        .nodes
-        .into_iter()
-        .map(|pr| {
-            let checks_status = pr
-                .commits
-                .nodes
-                .last()
-                .and_then(|node| node.commit.statusCheckRollup.as_ref())
-                .map(|rollup| rollup.state.to_lowercase())
-                .unwrap_or_else(|| "pending".to_string());
+    let prs_json: Vec<Value> = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse PRs: {}", e))?;
 
-            PullRequest {
-                id: format!("{}/{}/{}", owner, name, pr.number),
-                number: pr.number,
-                title: pr.title,
-                head_ref: pr.headRefName,
-                base_ref: pr.baseRefName,
-                repo_id: repo_id.to_string(),
-                repo_name: name.to_string(),
-                state: "open".to_string(),
-                mergeable: pr.mergeable == "MERGEABLE",
-                behind_count: 0,
-                checks_status,
-                review_decision: pr.reviewDecision,
-            }
-        })
+    let mut result = Vec::new();
+    for pr in &prs_json {
+        let draft = pr["draft"].as_bool().unwrap_or(false);
+        if draft {
+            continue;
+        }
+
+        let number = match pr["number"].as_u64() {
+            Some(n) => n as u32,
+            None => continue,
+        };
+        let title = pr["title"].as_str().unwrap_or("").to_string();
+        let head_ref = pr["head"]["ref"].as_str().unwrap_or("").to_string();
+        let base_ref = pr["base"]["ref"].as_str().unwrap_or("").to_string();
+        let mergeable = pr["mergeable"].as_bool();
+        let statuses_url = pr["statuses_url"].as_str().unwrap_or("").to_string();
+
+        let checks_status = if statuses_url.is_empty() {
+            "pending".to_string()
+        } else {
+            get_combined_status(&client, token, &statuses_url).await
+        };
+
+        result.push(PullRequest {
+            id: format!("{}/{}/{}", owner, name, number),
+            number,
+            title,
+            head_ref,
+            base_ref,
+            repo_id: repo_id.to_string(),
+            repo_name: name.to_string(),
+            state: "open".to_string(),
+            mergeable: mergeable.unwrap_or(false),
+            behind_count: 0,
+            checks_status,
+            review_decision: None,
+        });
+    }
+
+    Ok(result)
+}
+
+async fn get_combined_status(client: &Client, token: &str, statuses_url: &str) -> String {
+    let response = client
+        .get(statuses_url)
+        .bearer_auth(token)
+        .header("User-Agent", "polyrepo-git-ui")
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await;
+
+    let statuses: Vec<Value> = match response {
+        Ok(r) => r.json().await.unwrap_or_default(),
+        Err(_) => return "pending".to_string(),
+    };
+
+    if statuses.is_empty() {
+        return "pending".to_string();
+    }
+
+    let mut states: Vec<String> = statuses
+        .iter()
+        .filter_map(|s| s["state"].as_str().map(|s| s.to_string()))
         .collect();
 
-    Ok(prs)
+    states.sort();
+    states.dedup();
+
+    if states.contains(&"failure".to_string()) || states.contains(&"error".to_string()) {
+        "failure".to_string()
+    } else if states.contains(&"success".to_string()) {
+        "success".to_string()
+    } else {
+        "pending".to_string()
+    }
 }
 
 pub async fn sync_pr(token: &str, pr_id: &str, use_rebase: bool) -> Result<(), String> {
@@ -192,9 +124,8 @@ pub async fn sync_pr(token: &str, pr_id: &str, use_rebase: bool) -> Result<(), S
 
     let client = Client::new();
 
-    // Get the PR details first
     let pr_url = format!("{}/repos/{}/{}/pulls", GITHUB_API_BASE, owner, repo);
-    let _pr: RestPR = client
+    let _pr: Value = client
         .get(&pr_url)
         .bearer_auth(token)
         .header("User-Agent", "polyrepo-git-ui")
@@ -205,9 +136,6 @@ pub async fn sync_pr(token: &str, pr_id: &str, use_rebase: bool) -> Result<(), S
         .await
         .map_err(|e| format!("Failed to parse PR: {}", e))?;
 
-    // For now, we'll just fetch the repo to update it
-    // A full implementation would handle the actual sync operation
-    // by pushing the updated branch or creating a merge commit
     let _ = use_rebase;
 
     Ok(())

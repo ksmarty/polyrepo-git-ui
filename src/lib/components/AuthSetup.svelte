@@ -11,6 +11,7 @@
   let error: string | null = $state(null);
   let success: string | null = $state(null);
   let isAuthenticated: boolean = $state(false);
+  let scopes: string[] = $state([]);
 
   async function loadAuth() {
     try {
@@ -19,6 +20,14 @@
       isAuthenticated = auth.token !== null;
       authMethod = auth.method as 'oauth' | 'pat' | null;
       patUser = auth.user ?? '';
+
+      if (auth.token) {
+        try {
+          scopes = await invoke('get_github_token_scopes') as string[];
+        } catch {
+          scopes = [];
+        }
+      }
     } catch (e) {
       console.error('Failed to load auth:', e);
     }
@@ -65,6 +74,7 @@
       isAuthenticated = false;
       authMethod = null;
       patUser = '';
+      scopes = [];
       success = 'Disconnected from GitHub';
       dispatch('authChange');
     } catch (e) {
@@ -103,6 +113,9 @@
           as {patUser}
         {/if}
       </p>
+      {#if scopes.length > 0}
+        <p class="scopes-line">Scopes: {scopes.join(', ')}</p>
+      {/if}
       <button class="disconnect-button" onclick={disconnect}>
         <Unplug size={16} />
         Disconnect
@@ -229,7 +242,14 @@
   .auth-info {
     color: var(--text-secondary);
     font-size: 13px;
-    margin-bottom: 16px;
+    margin-bottom: 8px;
+  }
+
+  .scopes-line {
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-family: monospace;
+    margin-bottom: 14px;
   }
 
   .disconnect-button {

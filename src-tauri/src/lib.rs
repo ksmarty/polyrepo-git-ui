@@ -329,7 +329,7 @@ async fn get_all_prs(state: tauri::State<'_, AppState>) -> Result<Vec<PullReques
         match github::get_prs(&token, &owner, &name, &repo_id).await {
             Ok(prs) => all_prs.extend(prs),
             Err(e) => {
-                eprintln!("Failed to get PRs for {}/{}: {}", owner, name, e);
+                eprintln!("[polyrepo] PR fetch {}/{}: {}", owner, name, e);
             }
         }
     }
@@ -415,6 +415,35 @@ async fn check_git_installed() -> Result<bool, String> {
 async fn get_github_auth(state: tauri::State<'_, AppState>) -> Result<models::GitHubAuth, String> {
     let config = state.config.lock().await;
     Ok(config.github_auth.clone())
+}
+
+#[tauri::command]
+async fn get_github_token_scopes(state: tauri::State<'_, AppState>) -> Result<Vec<String>, String> {
+    let config = state.config.lock().await;
+    let token = match &config.github_auth.token {
+        Some(t) => t.clone(),
+        None => return Ok(vec![]),
+    };
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get("https://api.github.com/user")
+        .bearer_auth(&token)
+        .header("User-Agent", "polyrepo-git-ui")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to check scopes: {}", e))?;
+
+    let parts: Vec<_> = response
+        .headers()
+        .get_all("x-oauth-scopes")
+        .iter()
+        .flat_map(|h| h.to_str().unwrap_or("").split(','))
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    Ok(parts)
 }
 
 #[tauri::command]
@@ -525,9 +554,10 @@ async fn start_github_oauth(state: tauri::State<'_, AppState>) -> Result<(), Str
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;
 
     let state_code = uuid::Uuid::new_v4().to_string();
+    let redirect_uri = "http://127.0.0.1:14201/callback".to_string();
     let auth_url = format!(
-        "https://github.com/login/oauth/authorize?client_id={}&scope=repo,read:org&state={}",
-        client_id, state_code
+        "https://github.com/login/oauth/authorize?client_id={}&scope=repo,read:org&state={}&redirect_uri={}",
+        client_id, state_code, redirect_uri
     );
     open::that(&auth_url).map_err(|e| format!("Failed to open browser: {}", e))?;
 
@@ -586,6 +616,7 @@ async fn start_github_oauth(state: tauri::State<'_, AppState>) -> Result<(), Str
             ("client_id", &client_id),
             ("client_secret", &client_secret),
             ("code", &code),
+            ("redirect_uri", &redirect_uri),
         ])
         .send()
         .await
@@ -679,6 +710,7 @@ pub fn run() {
             clone_repo,
             check_git_installed,
             get_github_auth,
+            get_github_token_scopes,
             set_github_pat,
             start_github_oauth,
             disconnect_github,

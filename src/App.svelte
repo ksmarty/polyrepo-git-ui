@@ -220,7 +220,9 @@
   }
 
   app.loadAll();
-  checkGitHubAuth();
+  checkGitHubAuth().then(() => {
+    if (githubConnected) app.loadPRs();
+  });
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
@@ -615,6 +617,46 @@
                   {/if}
                 </div>
               </div>
+
+              {#if app.selectedRepo.github_owner && app.selectedRepo.github_repo}
+                {@const repoPrs = app.prs.filter(pr => pr.repo_id === app.selectedRepo!.id)}
+                {#if repoPrs.length > 0}
+                  <div class="repo-card">
+                    <div class="repo-prs">
+                      <h3 class="section-title">
+                        <GitPullRequest size={14} />
+                        Pull Requests
+                        <a
+                          class="view-all-link"
+                          href="https://github.com/{app.selectedRepo.github_owner}/{app.selectedRepo.github_repo}/pulls"
+                          onclick={(e) => { e.preventDefault(); openUrl(`https://github.com/${app.selectedRepo!.github_owner}/${app.selectedRepo!.github_repo}/pulls`); }}
+                        >
+                          View all
+                          <ExternalLink size={10} />
+                        </a>
+                      </h3>
+                      <div class="repo-pr-list">
+                        {#each repoPrs as pr (pr.id)}
+                          <div class="repo-pr-row">
+                            <span class="repo-pr-status" class:success={pr.checks_status === 'success'} class:failure={pr.checks_status === 'failure'} class:pending={pr.checks_status === 'pending'}></span>
+                            <span class="repo-pr-number">#{pr.number}</span>
+                            <span class="repo-pr-title">{pr.title}</span>
+                            {#if pr.html_url}
+                              <button
+                                class="repo-pr-link"
+                                onclick={() => openUrl(pr.html_url)}
+                                title="Open in GitHub"
+                              >
+                                <ExternalLink size={12} />
+                              </button>
+                            {/if}
+                          </div>
+                        {/each}
+                      </div>
+                    </div>
+                  </div>
+                {/if}
+              {/if}
             </div>
           {:else}
             <div class="empty-state">
@@ -1311,6 +1353,94 @@
     font-weight: 600;
     color: var(--text-secondary);
     margin-bottom: 10px;
+  }
+
+  .view-all-link {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  .view-all-link:hover {
+    text-decoration: underline;
+  }
+
+  .repo-prs {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .repo-pr-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .repo-pr-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+  }
+
+  .repo-pr-row:hover {
+    background-color: var(--bg-tertiary);
+  }
+
+  .repo-pr-status {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background-color: var(--text-secondary);
+  }
+
+  .repo-pr-status.success { background-color: var(--success); }
+  .repo-pr-status.failure { background-color: var(--danger); }
+  .repo-pr-status.pending { background-color: var(--warning); }
+
+  .repo-pr-number {
+    color: var(--text-secondary);
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  .repo-pr-title {
+    flex: 1;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .repo-pr-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .repo-pr-row:hover .repo-pr-link {
+    opacity: 1;
+  }
+
+  .repo-pr-link:hover {
+    background-color: var(--accent);
+    color: white;
   }
 
   .commit-list {

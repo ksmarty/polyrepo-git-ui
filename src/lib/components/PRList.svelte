@@ -129,14 +129,13 @@
       {#each [...getGroupedPRs()] as [repoName, prs] (repoName)}
         <div class="repo-group">
           <div class="repo-group-header">
-            <span class="repo-group-name">{repoName}</span>
-            <span class="repo-group-count">{prs.length}</span>
+            <span class="repo-group-name">{repoName} <span class="repo-group-count">{prs.length}</span></span>
           </div>
-          <div class="repo-group-prs">
+          <Masonry items={prs} colWidth={'minmax(400px, 1fr)'} gridGap={'10px'}>
             {#each prs as pr (pr.id)}
               <PRCard pr={pr} repoName="" {compact} onSelect={(p) => selectedPr = p} />
             {/each}
-          </div>
+          </Masonry>
         </div>
       {/each}
     </div>
@@ -317,12 +316,6 @@
     border-radius: 10px;
     font-size: 11px;
     font-weight: 500;
-  }
-
-  .repo-group-prs {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
   }
 
   .empty-state {

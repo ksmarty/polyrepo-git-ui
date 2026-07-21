@@ -224,7 +224,6 @@ async fn get_required_review_count_from_rulesets(client: &Client, token: &str, o
             continue;
         }
 
-        // Check if this ruleset applies to the default branch
         let includes = ruleset["conditions"]["ref_name"]["include"]
             .as_array()
             .map(|arr| {
@@ -239,12 +238,26 @@ async fn get_required_review_count_from_rulesets(client: &Client, token: &str, o
             continue;
         }
 
-        // Look for pull_request rule with required_approving_review_count
-        if let Some(rules) = ruleset["rules"].as_array() {
-            for rule in rules {
-                if rule["type"].as_str() == Some("pull_request") {
-                    if let Some(count) = rule["parameters"]["required_approving_review_count"].as_u64() {
-                        return Some(count as u32);
+        // Fetch the individual ruleset to get the rules array
+        if let Some(id) = ruleset["id"].as_u64() {
+            let detail_url = format!("{}/repos/{}/{}/rulesets/{}", GITHUB_API_BASE, owner, name, id);
+            if let Ok(detail_resp) = client
+                .get(&detail_url)
+                .bearer_auth(token)
+                .header("User-Agent", "polyrepo-git-ui")
+                .header("Accept", "application/vnd.github+json")
+                .send()
+                .await
+            {
+                if let Ok(detail) = detail_resp.json::<Value>().await {
+                    if let Some(rules) = detail["rules"].as_array() {
+                        for rule in rules {
+                            if rule["type"].as_str() == Some("pull_request") {
+                                if let Some(count) = rule["parameters"]["required_approving_review_count"].as_u64() {
+                                    return Some(count as u32);
+                                }
+                            }
+                        }
                     }
                 }
             }

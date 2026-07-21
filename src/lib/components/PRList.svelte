@@ -288,6 +288,11 @@
     gap: 6px;
   }
 
+  .pr-list :global(.pr-card) {
+    break-inside: avoid;
+    margin-bottom: 6px;
+  }
+
   .repo-group-prs {
     column-count: 1;
     column-gap: 10px;
@@ -307,7 +312,7 @@
 
   .repo-group {
     break-inside: avoid;
-    margin-bottom: 8px;
+    margin-bottom: 12px;
   }
 
   .repo-group-header {
@@ -332,12 +337,6 @@
     border-radius: 10px;
     font-size: 11px;
     font-weight: 500;
-  }
-
-  .repo-group-prs {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
   }
 
   .empty-state {

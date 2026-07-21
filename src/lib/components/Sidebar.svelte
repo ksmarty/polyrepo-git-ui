@@ -15,7 +15,7 @@
   let isDraggingRepo: boolean = $state(false);
   let dragOverGroupId: string | null = $state(null);
   let filterStale: boolean = $state(false);
-  let contextMenu: { x: number; y: number; repoId?: string; groupId?: string } | null = $state(null);
+  let contextMenu: { x: number; y: number; type: 'repo' | 'folder' | 'background'; repoId?: string; groupId?: string } | null = $state(null);
 
   function toggleGroup(groupId: string) {
     const next = new Set(expandedGroups);
@@ -87,13 +87,18 @@
 
   function handleContextMenu(e: MouseEvent, repo: Repository) {
     e.preventDefault();
-    contextMenu = { x: e.clientX, y: e.clientY, repoId: repo.id };
+    contextMenu = { x: e.clientX, y: e.clientY, type: 'repo', repoId: repo.id };
   }
 
   function handleGroupContextMenu(e: MouseEvent, groupId: string) {
     e.preventDefault();
     e.stopPropagation();
-    contextMenu = { x: e.clientX, y: e.clientY, groupId };
+    contextMenu = { x: e.clientX, y: e.clientY, type: 'folder', groupId };
+  }
+
+  function handleSidebarContextMenu(e: MouseEvent) {
+    e.preventDefault();
+    contextMenu = { x: e.clientX, y: e.clientY, type: 'background' };
   }
 
   function closeContextMenu() {
@@ -115,17 +120,30 @@
     closeContextMenu();
   }
 
-  async function sortRootGroups(ascending: boolean) {
+  async function sortAllTopLevel(ascending: boolean) {
+    // Sort root-level folders
     const rootGroups = app.groups
       .filter(g => g.parent_id === null)
       .sort((a, b) => ascending ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name));
     const groupIds = rootGroups.map(g => g.id);
+
+    // Sort ungrouped repos
+    const ungroupedRepos = app.repos
+      .filter(r => r.group_id === null)
+      .sort((a, b) => ascending ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name));
+    const ungroupedIds = ungroupedRepos.map(r => r.id);
+
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('reorder_groups', { groupIds });
+      if (groupIds.length > 0) {
+        await invoke('reorder_groups', { groupIds });
+      }
+      if (ungroupedIds.length > 0) {
+        await invoke('reorder_repos', { repoIds: ungroupedIds });
+      }
       await app.loadAll();
     } catch (e) {
-      console.error('Failed to sort groups:', e);
+      console.error('Failed to sort top-level elements:', e);
     }
     closeContextMenu();
   }
@@ -376,7 +394,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<aside class="sidebar" onselectstart={(e) => e.preventDefault()}>
+<aside class="sidebar" onselectstart={(e) => e.preventDefault()} oncontextmenu={handleSidebarContextMenu}>
   <div class="sidebar-header">
     <div class="search-wrapper">
       <Search size={14} />
@@ -643,24 +661,24 @@
     role="menu"
     onclick={(e) => e.stopPropagation()}
   >
-    {#if contextMenu.repoId}
+    {#if contextMenu.type === 'repo'}
       <button class="context-menu-item danger" role="menuitem" onclick={removeRepoFromSidebar}>
         <Trash2 size={14} />
         Remove
       </button>
-    {:else if contextMenu.groupId}
+    {:else if contextMenu.type === 'folder'}
       <button class="context-menu-item" role="menuitem" onclick={() => sortReposByName(contextMenu!.groupId!, true)}>
         Sort A → Z
       </button>
       <button class="context-menu-item" role="menuitem" onclick={() => sortReposByName(contextMenu!.groupId!, false)}>
         Sort Z → A
       </button>
-      <div class="context-menu-divider"></div>
-      <button class="context-menu-item" role="menuitem" onclick={() => sortRootGroups(true)}>
-        Sort folders A → Z
+    {:else if contextMenu.type === 'background'}
+      <button class="context-menu-item" role="menuitem" onclick={() => sortAllTopLevel(true)}>
+        Sort all A → Z
       </button>
-      <button class="context-menu-item" role="menuitem" onclick={() => sortRootGroups(false)}>
-        Sort folders Z → A
+      <button class="context-menu-item" role="menuitem" onclick={() => sortAllTopLevel(false)}>
+        Sort all Z → A
       </button>
     {/if}
   </div>

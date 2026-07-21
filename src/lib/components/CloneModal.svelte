@@ -135,19 +135,17 @@
     }
   }
 
-  function handleClickOutside(e: MouseEvent) {
+  function handleModalClick(e: MouseEvent) {
     if (dropdownRef && !dropdownRef.contains(e.target as Node)) {
       showDropdown = false;
     }
   }
 </script>
 
-<svelte:window onclick={handleClickOutside} />
-
 <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
 <div class="modal-overlay" role="presentation" onclick={() => dispatch('close')} onkeydown={(e) => e.key === 'Escape' && dispatch('close')}>
   <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-  <div class="modal" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+  <div class="modal" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => { e.stopPropagation(); handleModalClick(e); }} onkeydown={(e) => e.stopPropagation()}>
     <div class="modal-header">
       <h3>Clone Repository</h3>
       <button class="close-btn" onclick={() => dispatch('close')}>
@@ -460,7 +458,7 @@
     border: 1px solid var(--border);
     border-radius: 8px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-    max-height: 280px;
+    max-height: 200px;
     overflow-y: auto;
     z-index: 10;
   }

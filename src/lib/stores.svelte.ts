@@ -6,7 +6,7 @@ class AppState {
   repos: Repository[] = $state([]);
   groups: RepoGroup[] = $state([]);
   selectedRepo: Repository | null = $state(null);
-  config: AppConfig = $state({ default_branch: 'main', default_repo_location: '', theme: 'midnight', auto_fetch_on_open: true, fetch_interval_seconds: 300, sidebar_width: 300 });
+  config: AppConfig = $state({ default_branch: 'main', default_repo_location: '', theme: 'midnight', auto_fetch_on_open: true, fetch_interval_seconds: 300, sidebar_width: 300, pr_density: 'compact' });
   gitLog: GitLogEntry[] = $state([]);
   gitStatus: GitStatus | null = $state(null);
   loadingGitLog: boolean = $state(false);
@@ -42,13 +42,13 @@ class AppState {
     setTimeout(() => { this.notification = null; }, 4000);
   }
 
-  async loadPRs(force: boolean = false) {
-    if (this.loadingPrs) return;
+  async loadPRs(force: boolean = false, stateFilter: string = 'open') {
     this.loadingPrs = true;
     this.prsError = null;
+    const timeout = setTimeout(() => { this.loadingPrs = false; }, 30000);
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      const fresh: PullRequest[] = await invoke('get_all_prs');
+      const fresh: PullRequest[] = await invoke('get_all_prs', { stateFilter });
       if (!force && this.prsLoaded) {
         const oldIds = this.prs.map(p => p.id).sort().join(',');
         const newIds = fresh.map(p => p.id).sort().join(',');
@@ -68,6 +68,7 @@ class AppState {
     } catch (e) {
       this.prsError = e instanceof Error ? e.message : 'Failed to load PRs';
     } finally {
+      clearTimeout(timeout);
       this.loadingPrs = false;
     }
   }

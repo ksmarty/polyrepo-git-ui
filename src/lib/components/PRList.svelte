@@ -1,11 +1,18 @@
 <script lang="ts">
   import type { PullRequest } from '../types';
   import PRCard from './PRCard.svelte';
-  import { RefreshCw, GitPullRequest } from '@lucide/svelte';
+  import PRDetail from './PRDetail.svelte';
+  import { RefreshCw, GitPullRequest, LayoutGrid, List } from '@lucide/svelte';
   import { app } from '../stores.svelte';
 
   let filterRepo: string = $state('all');
+  let filterState: string = $state('open');
   let filterStatus: string = $state('all');
+  let groupByRepo: boolean = $state(true);
+  let initialized: boolean = $state(false);
+  let selectedPr: PullRequest | null = $state(null);
+
+  const compact = $derived(app.config.pr_density === 'compact');
 
   function getFilteredPRs(): PullRequest[] {
     let filtered = app.prs;
@@ -33,7 +40,26 @@
     return repo?.name ?? 'Unknown';
   }
 
-  app.loadPRs();
+  function getGroupedPRs(): Map<string, PullRequest[]> {
+    const groups = new Map<string, PullRequest[]>();
+    for (const pr of getFilteredPRs()) {
+      const name = getRepoName(pr.repo_id);
+      const list = groups.get(name) ?? [];
+      list.push(pr);
+      groups.set(name, list);
+    }
+    return groups;
+  }
+
+  $effect(() => {
+    const state = filterState;
+    if (initialized) {
+      app.loadPRs(true, state);
+    } else {
+      app.loadPRs(false, state);
+      initialized = true;
+    }
+  });
 </script>
 
 <div class="pr-view">
@@ -47,6 +73,12 @@
         {/each}
       </select>
 
+      <select bind:value={filterState}>
+        <option value="open">Open</option>
+        <option value="closed">Closed</option>
+        <option value="all">All States</option>
+      </select>
+
       <select bind:value={filterStatus}>
         <option value="all">All Status</option>
         <option value="behind">Behind Default</option>
@@ -54,8 +86,21 @@
         <option value="conflicts">Has Conflicts</option>
       </select>
 
-      <button class="refresh-btn" onclick={() => app.loadPRs(true)} disabled={app.loadingPrs}>
-        <span class:spin={app.loadingPrs}><RefreshCw size={14} /></span>
+      <button
+        class="toggle-btn"
+        class:active={groupByRepo}
+        onclick={() => groupByRepo = !groupByRepo}
+        title={groupByRepo ? 'Ungroup PRs' : 'Group by repo'}
+      >
+        {#if groupByRepo}
+          <LayoutGrid size={14} />
+        {:else}
+          <List size={14} />
+        {/if}
+      </button>
+
+      <button class="refresh-btn" onclick={() => app.loadPRs(true, filterState)} disabled={app.loadingPrs}>
+        <span class="spin-wrapper" class:spin={app.loadingPrs}><RefreshCw size={14} /></span>
       </button>
     </div>
   </div>
@@ -63,7 +108,7 @@
   {#if app.prsError}
     <div class="error">
       <p>{app.prsError}</p>
-      <button onclick={() => app.loadPRs(true)}>Retry</button>
+      <button onclick={() => app.loadPRs(true, filterState)}>Retry</button>
     </div>
   {:else if app.loadingPrs && !app.prsLoaded}
     <div class="loading">
@@ -78,12 +123,36 @@
         <p class="hint">Try adjusting your filters</p>
       {/if}
     </div>
-  {:else}
+  {:else if groupByRepo}
     <div class="pr-list">
-      {#each getFilteredPRs() as pr (pr.id)}
-        <PRCard {pr} repoName={getRepoName(pr.repo_id)} />
+      {#each [...getGroupedPRs()] as [repoName, prs] (repoName)}
+        <div class="repo-group">
+          <div class="repo-group-header">
+            <span class="repo-group-name">{repoName}</span>
+            <span class="repo-group-count">{prs.length}</span>
+          </div>
+          <div class="repo-group-prs">
+            {#each prs as pr (pr.id)}
+              <PRCard {pr} repoName="" {compact} onSelect={(p) => selectedPr = p} />
+            {/each}
+          </div>
+        </div>
       {/each}
     </div>
+  {:else}
+    <div class="pr-list flat">
+        {#each getFilteredPRs() as pr (pr.id)}
+          <PRCard {pr} repoName={getRepoName(pr.repo_id)} {compact} onSelect={(p) => selectedPr = p} />
+        {/each}
+    </div>
+  {/if}
+
+  {#if selectedPr}
+    <PRDetail
+      pr={selectedPr}
+      repoName={getRepoName(selectedPr.repo_id)}
+      onClose={() => selectedPr = null}
+    />
   {/if}
 </div>
 
@@ -133,6 +202,34 @@
   .refresh-btn:hover {
     background-color: var(--accent);
     color: white;
+  }
+
+  .toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    background-color: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border-radius: 8px;
+  }
+
+  .toggle-btn:hover {
+    background-color: var(--accent);
+    color: white;
+  }
+
+  .toggle-btn.active {
+    background-color: var(--accent);
+    color: white;
+  }
+
+  .spin-wrapper {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .spin {
@@ -188,7 +285,59 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 6px;
+  }
+
+  .repo-group-prs {
+    column-count: 1;
+    column-gap: 10px;
+  }
+
+  @media (min-width: 900px) {
+    .pr-list.flat {
+      column-count: 2;
+      column-gap: 10px;
+      display: block;
+    }
+
+    .repo-group-prs {
+      column-count: 2;
+    }
+  }
+
+  .repo-group {
+    break-inside: avoid;
+    margin-bottom: 8px;
+  }
+
+  .repo-group-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .repo-group-name {
+    flex: 1;
+  }
+
+  .repo-group-count {
+    background-color: var(--bg-tertiary);
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .repo-group-prs {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
   }
 
   .empty-state {

@@ -206,7 +206,7 @@
       dragClass: 'sortable-drag',
       forceFallback: true,
       fallbackClass: 'sortable-drag',
-      distance: 15,
+      fallbackTolerance: 5,
       delay: 150,
       delayOnTouchOnly: true,
       onEnd: async (evt: any) => {
@@ -241,7 +241,7 @@
       dragClass: 'sortable-drag',
       forceFallback: true,
       fallbackClass: 'sortable-drag',
-      distance: 25,
+      fallbackTolerance: 5,
       delay: 150,
       delayOnTouchOnly: true,
       onStart() {

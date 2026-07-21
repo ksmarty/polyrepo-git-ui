@@ -207,6 +207,8 @@
     justify-content: space-between;
     gap: 16px;
     cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
     transition: border-color 0.15s;
   }
 

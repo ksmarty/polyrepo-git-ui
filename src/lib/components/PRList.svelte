@@ -166,6 +166,12 @@
     display: flex;
     flex-direction: column;
     user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .pr-view * {
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   .pr-header {

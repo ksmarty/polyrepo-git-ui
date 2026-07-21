@@ -194,6 +194,13 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .modal-content * {
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   .modal-header {

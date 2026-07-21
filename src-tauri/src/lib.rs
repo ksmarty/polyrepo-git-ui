@@ -302,7 +302,7 @@ async fn reorder_repos(
 }
 
 #[tauri::command]
-async fn get_all_prs(state: tauri::State<'_, AppState>) -> Result<Vec<PullRequest>, String> {
+async fn get_all_prs(state: tauri::State<'_, AppState>, state_filter: Option<String>) -> Result<Vec<PullRequest>, String> {
     let (repos_data, token) = {
         let config = state.config.lock().await;
         let repos_data: Vec<(String, String, String)> = config
@@ -324,9 +324,10 @@ async fn get_all_prs(state: tauri::State<'_, AppState>) -> Result<Vec<PullReques
         Some(t) => t,
         None => return Ok(Vec::new()),
     };
+    let pr_state = state_filter.unwrap_or_else(|| "open".to_string());
     let mut all_prs = Vec::new();
     for (repo_id, owner, name) in repos_data {
-        match github::get_prs(&token, &owner, &name, &repo_id).await {
+        match github::get_prs(&token, &owner, &name, &repo_id, &pr_state).await {
             Ok(prs) => all_prs.extend(prs),
             Err(e) => {
                 eprintln!("[polyrepo] PR fetch {}/{}: {}", owner, name, e);

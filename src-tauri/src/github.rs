@@ -5,9 +5,9 @@ use crate::models::PullRequest;
 
 const GITHUB_API_BASE: &str = "https://api.github.com";
 
-pub async fn get_prs(token: &str, owner: &str, name: &str, repo_id: &str) -> Result<Vec<PullRequest>, String> {
+pub async fn get_prs(token: &str, owner: &str, name: &str, repo_id: &str, state: &str) -> Result<Vec<PullRequest>, String> {
     let client = Client::new();
-    let prs_url = format!("{}/repos/{}/{}/pulls?state=open&per_page=50", GITHUB_API_BASE, owner, name);
+    let prs_url = format!("{}/repos/{}/{}/pulls?state={}&per_page=50", GITHUB_API_BASE, owner, name, state);
 
     let response = client
         .get(&prs_url)
@@ -33,6 +33,8 @@ pub async fn get_prs(token: &str, owner: &str, name: &str, repo_id: &str) -> Res
         .await
         .map_err(|e| format!("Failed to parse PRs: {}", e))?;
 
+    let required_reviews = get_required_review_count(&client, token, owner, name).await;
+
     let mut result = Vec::new();
     for pr in &prs_json {
         let draft = pr["draft"].as_bool().unwrap_or(false);
@@ -49,12 +51,27 @@ pub async fn get_prs(token: &str, owner: &str, name: &str, repo_id: &str) -> Res
         let base_ref = pr["base"]["ref"].as_str().unwrap_or("").to_string();
         let mergeable = pr["mergeable"].as_bool();
         let statuses_url = pr["statuses_url"].as_str().unwrap_or("").to_string();
+        let html_url = pr["html_url"].as_str().unwrap_or("").to_string();
+        let pr_state = pr["state"].as_str().unwrap_or("open").to_string();
 
         let checks_status = if statuses_url.is_empty() {
             "pending".to_string()
         } else {
             get_combined_status(&client, token, &statuses_url).await
         };
+
+        let body = pr["body"].as_str().map(|s| s.to_string());
+        let author = pr["user"]["login"].as_str().map(|s| s.to_string());
+        let requested_reviewers: Vec<String> = pr["requested_reviewers"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|r| r["login"].as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let approved_reviews = get_approved_review_count(&client, token, owner, name, number).await;
 
         result.push(PullRequest {
             id: format!("{}/{}/{}", owner, name, number),
@@ -64,11 +81,17 @@ pub async fn get_prs(token: &str, owner: &str, name: &str, repo_id: &str) -> Res
             base_ref,
             repo_id: repo_id.to_string(),
             repo_name: name.to_string(),
-            state: "open".to_string(),
-            mergeable: mergeable.unwrap_or(false),
+            state: pr_state,
+            mergeable: mergeable.unwrap_or(true),
             behind_count: 0,
             checks_status,
             review_decision: None,
+            html_url,
+            body,
+            author,
+            requested_reviewers,
+            approved_reviews,
+            required_reviews,
         });
     }
 
@@ -108,6 +131,62 @@ async fn get_combined_status(client: &Client, token: &str, statuses_url: &str) -
     } else {
         "pending".to_string()
     }
+}
+
+async fn get_required_review_count(client: &Client, token: &str, owner: &str, name: &str) -> u32 {
+    let url = format!("{}/repos/{}/{}/branches/main/protection/required_pull_request_reviews", GITHUB_API_BASE, owner, name);
+    let response = client
+        .get(&url)
+        .bearer_auth(token)
+        .header("User-Agent", "polyrepo-git-ui")
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await;
+
+    match response {
+        Ok(r) if r.status().is_success() => {
+            let data: Value = r.json().await.unwrap_or_default();
+            data["required_approving_review_count"].as_u64().unwrap_or(0) as u32
+        }
+        _ => {
+            let url = format!("{}/repos/{}/{}/branches/master/protection/required_pull_request_reviews", GITHUB_API_BASE, owner, name);
+            let response = client
+                .get(&url)
+                .bearer_auth(token)
+                .header("User-Agent", "polyrepo-git-ui")
+                .header("Accept", "application/vnd.github+json")
+                .send()
+                .await;
+            match response {
+                Ok(r) if r.status().is_success() => {
+                    let data: Value = r.json().await.unwrap_or_default();
+                    data["required_approving_review_count"].as_u64().unwrap_or(0) as u32
+                }
+                _ => 0,
+            }
+        }
+    }
+}
+
+async fn get_approved_review_count(client: &Client, token: &str, owner: &str, name: &str, pr_number: u32) -> u32 {
+    let url = format!("{}/repos/{}/{}/pulls/{}/reviews", GITHUB_API_BASE, owner, name, pr_number);
+    let response = client
+        .get(&url)
+        .bearer_auth(token)
+        .header("User-Agent", "polyrepo-git-ui")
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await;
+
+    let reviews: Vec<Value> = match response {
+        Ok(r) => r.json().await.unwrap_or_default(),
+        Err(_) => return 0,
+    };
+
+    reviews
+        .iter()
+        .filter(|r| r["state"].as_str() == Some("APPROVED"))
+        .count() as u32
 }
 
 pub async fn sync_pr(token: &str, pr_id: &str, use_rebase: bool) -> Result<(), String> {

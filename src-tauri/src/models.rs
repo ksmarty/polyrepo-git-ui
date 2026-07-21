@@ -47,6 +47,12 @@ pub struct PullRequest {
     pub behind_count: u32,
     pub checks_status: String,
     pub review_decision: Option<String>,
+    pub html_url: String,
+    pub body: Option<String>,
+    pub author: Option<String>,
+    pub requested_reviewers: Vec<String>,
+    pub approved_reviews: u32,
+    pub required_reviews: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

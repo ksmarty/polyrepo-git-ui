@@ -41,6 +41,12 @@ export interface PullRequest {
   behind_count: number;
   checks_status: 'pending' | 'success' | 'failure' | 'cancelled';
   review_decision: 'approved' | 'changes_requested' | 'review_required' | null;
+  html_url: string;
+  body: string | null;
+  author: string | null;
+  requested_reviewers: string[];
+  approved_reviews: number;
+  required_reviews: number;
 }
 
 export interface GitHubAuth {
@@ -56,4 +62,5 @@ export interface AppConfig {
   auto_fetch_on_open: boolean;
   fetch_interval_seconds: number;
   sidebar_width: number;
+  pr_density: 'compact' | 'relaxed';
 }

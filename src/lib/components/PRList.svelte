@@ -293,17 +293,17 @@
   }
 
   .repo-group {
-    background-color: var(--bg-secondary);
+    background-color: var(--bg-tertiary);
     border: 1px solid var(--border);
     border-radius: 10px;
-    padding: 4px 0;
+    padding: 8px 8px;
   }
 
   .repo-group-header {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 14px;
+    padding: 4px 10px 8px;
     font-size: 12px;
     font-weight: 600;
     color: var(--text-secondary);

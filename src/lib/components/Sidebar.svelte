@@ -187,7 +187,7 @@
       dragClass: 'sortable-drag',
       forceFallback: true,
       fallbackClass: 'sortable-drag',
-      distance: 12,
+      distance: 25,
       delay: 150,
       delayOnTouchOnly: true,
       onStart() {

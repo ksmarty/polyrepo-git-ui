@@ -82,73 +82,75 @@
     </div>
 
     <div class="modal-body">
-      <div class="pr-info-row">
-        <span class="info-label">Repository</span>
-        <span class="info-value">{repoName}</span>
-      </div>
-
-      <div class="pr-info-row">
-        <span class="info-label">Author</span>
-        <span class="info-value">{pr.author ?? 'Unknown'}</span>
-      </div>
-
-      <div class="pr-info-row">
-        <span class="info-label">State</span>
-        <span class="status-chip {getStateClass()}">{pr.state}</span>
-      </div>
-
-      <div class="pr-info-row">
-        <span class="info-label">Branch</span>
-        <span class="info-value branch-info">
-          <span class="head-branch">{pr.head_ref}</span>
-          <span class="arrow">&rarr;</span>
-          <span class="base-branch">{pr.base_ref}</span>
-        </span>
-      </div>
-
-      <div class="pr-info-row">
-        <span class="info-label">Checks</span>
-        {#if pr.checks_status}
-          {@const ChecksIcon = getChecksIcon()}
-          <span class="status-chip checks {getChecksClass()}">
-            <ChecksIcon size={12} />
-            {pr.checks_status}
-          </span>
-        {/if}
-      </div>
-
-      {#if pr.review_decision}
+      <div class="info-section">
         <div class="pr-info-row">
-          <span class="info-label">Review</span>
-          <span class="status-chip {getReviewClass()}">
-            {pr.review_decision.replace('_', ' ')}
+          <span class="info-label">Repository</span>
+          <span class="info-value">{repoName}</span>
+        </div>
+
+        <div class="pr-info-row">
+          <span class="info-label">Author</span>
+          <span class="info-value">{pr.author ?? 'Unknown'}</span>
+        </div>
+
+        <div class="pr-info-row">
+          <span class="info-label">State</span>
+          <span class="status-chip {getStateClass()}">{pr.state}</span>
+        </div>
+
+        <div class="pr-info-row">
+          <span class="info-label">Branch</span>
+          <span class="info-value branch-info">
+            <span class="head-branch">{pr.head_ref}</span>
+            <span class="arrow">&rarr;</span>
+            <span class="base-branch">{pr.base_ref}</span>
           </span>
         </div>
-      {/if}
 
-      {#if pr.requested_reviewers.length > 0}
         <div class="pr-info-row">
-          <span class="info-label">
-            <Users size={14} />
-            Reviewers
-          </span>
-          <span class="info-value">
-            {#each pr.requested_reviewers as reviewer, i}{reviewer}{#if i < pr.requested_reviewers.length - 1}, {/if}{/each}
-          </span>
-        </div>
-      {/if}
-
-      <div class="pr-info-row">
-        <span class="info-label">Sync</span>
-        <span class="info-value">
-          {#if !pr.mergeable}
-            Has conflicts
-          {:else if pr.behind_count > 0}
-            {pr.behind_count} commits behind
-          {:else}
-            Up to date
+          <span class="info-label">Checks</span>
+          {#if pr.checks_status}
+            {@const ChecksIcon = getChecksIcon()}
+            <span class="status-chip checks {getChecksClass()}">
+              <ChecksIcon size={12} />
+              {pr.checks_status}
+            </span>
           {/if}
-        </span>
+        </div>
+
+        {#if pr.review_decision}
+          <div class="pr-info-row">
+            <span class="info-label">Review</span>
+            <span class="status-chip {getReviewClass()}">
+              {pr.review_decision.replace('_', ' ')}
+            </span>
+          </div>
+        {/if}
+
+        {#if pr.requested_reviewers.length > 0}
+          <div class="pr-info-row">
+            <span class="info-label">
+              <Users size={14} />
+              Reviewers
+            </span>
+            <span class="info-value">
+              {#each pr.requested_reviewers as reviewer, i}{reviewer}{#if i < pr.requested_reviewers.length - 1}, {/if}{/each}
+            </span>
+          </div>
+        {/if}
+
+        <div class="pr-info-row">
+          <span class="info-label">Sync</span>
+          <span class="info-value">
+            {#if !pr.mergeable}
+              Has conflicts
+            {:else if pr.behind_count > 0}
+              {pr.behind_count} commits behind
+            {:else}
+              Up to date
+            {/if}
+          </span>
+        </div>
       </div>
 
       {#if pr.body}
@@ -242,10 +244,16 @@
     padding: 16px 20px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
     flex: 1;
-    overflow-y: auto;
     min-height: 0;
+    overflow: hidden;
+  }
+
+  .info-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex-shrink: 0;
   }
 
   .pr-info-row {
@@ -344,6 +352,9 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+    flex: 1;
+    min-height: 0;
+    margin-top: 12px;
   }
 
   .description-content {
@@ -355,7 +366,8 @@
     color: var(--text-primary);
     word-break: break-word;
     line-height: 1.5;
-    max-height: 300px;
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
   }
 

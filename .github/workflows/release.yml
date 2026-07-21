@@ -21,9 +21,6 @@ jobs:
             target: aarch64-apple-darwin
           - platform: macos-latest
             target: x86_64-apple-darwin
-          - platform: macos-latest
-            target: universal-apple-darwin
-            universal: true
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
 
@@ -44,7 +41,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.universal && 'aarch64-apple-darwin,x86_64-apple-darwin' || matrix.target }}
+          targets: ${{ matrix.target }}
 
       - name: Install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-latest'
@@ -54,21 +51,6 @@ jobs:
 
       - name: Install frontend dependencies
         run: pnpm install
-
-      - name: Build individual architectures (universal prereq)
-        if: matrix.universal
-        env:
-          OAUTH_CLIENT_ID: ${{ secrets.OAUTH_CLIENT_ID }}
-          OAUTH_CLIENT_SECRET: ${{ secrets.OAUTH_CLIENT_SECRET }}
-        run: |
-          cargo build --release --target x86_64-apple-darwin
-          cargo build --release --target aarch64-apple-darwin
-          mkdir -p src-tauri/target/universal-apple-darwin/release
-          lipo -create \
-            src-tauri/target/x86_64-apple-darwin/release/polyrepo-git-ui \
-            src-tauri/target/aarch64-apple-darwin/release/polyrepo-git-ui \
-            -output src-tauri/target/universal-apple-darwin/release/polyrepo-git-ui
-        working-directory: src-tauri
 
       - name: Build and release
         uses: tauri-apps/tauri-action@v0

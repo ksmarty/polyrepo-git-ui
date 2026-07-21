@@ -2,6 +2,10 @@
 
 A cross-platform desktop app for managing multiple git repositories. Built with Tauri v2 + Rust + Svelte.
 
+## Download
+
+**[Download the latest release](https://github.com/kyleschwartz/polyrepo-git-ui/releases/latest)** — installers are available for macOS (Intel + Apple Silicon) and Windows.
+
 ## Features
 
 - **Repo management** — Add, browse, and organize repos into folders
@@ -10,19 +14,29 @@ A cross-platform desktop app for managing multiple git repositories. Built with 
 - **Bulk import** — Scan a parent folder for git repos and import them all
 - **Theme support** — 8 built-in themes (Dark, Light, Midnight, Forest, Ocean, Solarized, Catppuccin, System)
 
-## Prerequisites
+## Development
+
+### Prerequisites
 
 - [Rust](https://rustup.rs/)
 - [Node.js](https://nodejs.org/) >= 18
 - [pnpm](https://pnpm.io/)
 - [Tauri v2 CLI](https://v2.tauri.app/start/prerequisites/)
 
-## Development
+### Getting started
 
 ```bash
 pnpm install
 pnpm tauri dev
 ```
+
+### Running tests
+
+```bash
+pnpm verify
+```
+
+This runs `svelte-check` for frontend and `cargo check` + `cargo test` for Rust. A git pre-commit hook runs this automatically before each commit.
 
 ## GitHub Integration
 
@@ -78,11 +92,3 @@ The flow runs a local callback server on port `14201` for 2 minutes. If it times
 Config is stored at:
 - **macOS / Linux**: `~/.config/polyrepo-git-ui/config.toml`
 - **Windows**: `%APPDATA%\polyrepo-git-ui\config.toml`
-
-## Running tests
-
-```bash
-pnpm verify
-```
-
-This runs `svelte-check` for frontend and `cargo check` for Rust. A git pre-commit hook runs this automatically before each commit.

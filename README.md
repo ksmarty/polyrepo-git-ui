@@ -4,7 +4,7 @@ A cross-platform desktop app for managing multiple git repositories. Built with 
 
 ## Download
 
-**[Download the latest release](https://github.com/kyleschwartz/polyrepo-git-ui/releases/latest)** — installers are available for macOS (Intel + Apple Silicon) and Windows.
+**[Download the latest release](https://github.com/kyleschwartz/polyrepo-git-ui/releases/latest)** — installers available for macOS and Windows.
 
 ## Features
 

@@ -18,11 +18,11 @@ jobs:
       matrix:
         include:
           - platform: macos-latest
-            target: aarch64-apple-darwin
-          - platform: macos-latest
             target: x86_64-apple-darwin
+            os_name: macOS
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
+            os_name: Windows
 
     runs-on: ${{ matrix.platform }}
 
@@ -43,26 +43,48 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install dependencies (ubuntu only)
-        if: matrix.platform == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev
-
       - name: Install frontend dependencies
         run: pnpm install
 
-      - name: Build and release
+      - name: Build
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OAUTH_CLIENT_ID: ${{ secrets.OAUTH_CLIENT_ID }}
           OAUTH_CLIENT_SECRET: ${{ secrets.OAUTH_CLIENT_SECRET }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Polyrepo Git UI ${{ github.ref_name }}'
-          releaseBody: 'See the assets to download and install this version.'
-          releaseDraft: false
-          prerelease: false
           tauriScript: pnpm tauri
           args: --target ${{ matrix.target }}
+
+      - name: Upload release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle"
+          VERSION="${GITHUB_REF_NAME#v}"
+          TAG="$GITHUB_REF_NAME"
+
+          # Create release if it doesn't exist
+          gh release view "$TAG" --json tagName >/dev/null 2>&1 || \
+            gh release create "$TAG" "Polyrepo Git UI $TAG" --generate-notes
+
+          if [ "${{ matrix.os_name }}" = "macOS" ]; then
+            DMG=$(find "$BUNDLE_DIR/dmg" -name "*.dmg" | head -1)
+            APP=$(find "$BUNDLE_DIR/macos" -name "*.app" -maxdepth 1 | head -1)
+            cp "$DMG" "PolyrepoGitUI-${VERSION}-macOS.dmg"
+            ditto -c -k --sequesterRsrc --keepParent "$APP" "PolyrepoGitUI-${VERSION}-macOS.zip"
+            gh release upload "$TAG" \
+              "PolyrepoGitUI-${VERSION}-macOS.dmg" \
+              "PolyrepoGitUI-${VERSION}-macOS.zip" \
+              --clobber
+          else
+            MSI=$(find "$BUNDLE_DIR/msi" -name "*.msi" | head -1)
+            EXE_INSTALLER=$(find "$BUNDLE_DIR/nsis" -name "*.exe" | head -1)
+            cp "$MSI" "PolyrepoGitUI-${VERSION}-Windows.msi"
+            cp "$EXE_INSTALLER" "PolyrepoGitUI-${VERSION}-Windows.exe"
+            gh release upload "$TAG" \
+              "PolyrepoGitUI-${VERSION}-Windows.msi" \
+              "PolyrepoGitUI-${VERSION}-Windows.exe" \
+              --clobber
+          fi

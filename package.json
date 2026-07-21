@@ -31,6 +31,7 @@
     "@tauri-apps/cli": "^2.11.4",
     "@types/sortablejs": "^1.15.9",
     "svelte": "^5.56.5",
+    "svelte-bricks": "^0.5.0",
     "svelte-check": "^4.7.3",
     "typescript": "~5.8.3",
     "vite": "^8.1.5"

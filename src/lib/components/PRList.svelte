@@ -2,6 +2,7 @@
   import type { PullRequest } from '../types';
   import PRCard from './PRCard.svelte';
   import PRDetail from './PRDetail.svelte';
+  import Masonry from 'svelte-bricks';
   import { RefreshCw, GitPullRequest, LayoutGrid, List } from '@lucide/svelte';
   import { app } from '../stores.svelte';
 
@@ -131,19 +132,21 @@
             <span class="repo-group-name">{repoName}</span>
             <span class="repo-group-count">{prs.length}</span>
           </div>
-          <div class="repo-group-prs">
-            {#each prs as pr (pr.id)}
-              <PRCard {pr} repoName="" {compact} onSelect={(p) => selectedPr = p} />
-            {/each}
-          </div>
+          <Masonry items={prs} minColWidth={300} maxColWidth={500} gap={10} idKey="id">
+            {#snippet children({ item })}
+              <PRCard pr={item} repoName="" {compact} onSelect={(p) => selectedPr = p} />
+            {/snippet}
+          </Masonry>
         </div>
       {/each}
     </div>
   {:else}
     <div class="pr-list flat">
-        {#each getFilteredPRs() as pr (pr.id)}
-          <PRCard {pr} repoName={getRepoName(pr.repo_id)} {compact} onSelect={(p) => selectedPr = p} />
-        {/each}
+      <Masonry items={getFilteredPRs()} minColWidth={300} maxColWidth={500} gap={10} idKey="id">
+        {#snippet children({ item })}
+          <PRCard pr={item} repoName={getRepoName(item.repo_id)} {compact} onSelect={(p) => selectedPr = p} />
+        {/snippet}
+      </Masonry>
     </div>
   {/if}
 
@@ -288,30 +291,7 @@
     gap: 6px;
   }
 
-  .pr-list :global(.pr-card) {
-    break-inside: avoid;
-    margin-bottom: 6px;
-  }
-
-  .repo-group-prs {
-    column-count: 1;
-    column-gap: 10px;
-  }
-
-  @media (min-width: 900px) {
-    .pr-list.flat {
-      column-count: 2;
-      column-gap: 10px;
-      display: block;
-    }
-
-    .repo-group-prs {
-      column-count: 2;
-    }
-  }
-
   .repo-group {
-    break-inside: avoid;
     margin-bottom: 12px;
   }
 

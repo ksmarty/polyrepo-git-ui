@@ -48,6 +48,9 @@ importers:
       svelte:
         specifier: ^5.56.5
         version: 5.56.5
+      svelte-bricks:
+        specifier: ^0.5.0
+        version: 0.5.0(svelte@5.56.5)
       svelte-check:
         specifier: ^4.7.3
         version: 4.7.3(picomatch@4.0.5)(svelte@5.56.5)(typescript@5.8.3)
@@ -540,6 +543,11 @@ packages:
     resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
     engines: {node: '>=0.10.0'}
 
+  svelte-bricks@0.5.0:
+    resolution: {integrity: sha512-e/htJ4lifVfFTY5tVTsJ9UjsB5GXJ5BalfJxe3GzmB5x6zQBhMmEb6yYzyw5OoSvNm+6YZexlD8/fUfqe1GUvA==}
+    peerDependencies:
+      svelte: '>=5'
+
   svelte-check@4.7.3:
     resolution: {integrity: sha512-DHdTCGX62R0fCxBEaT+USdASAnoaRBaaNczkRJl0K7o3WyoCeVUbVxo6fKqpOll/B+WMWCsiFK0eFrJSNBKZIg==}
     engines: {node: '>= 18.0.0'}
@@ -994,6 +1002,10 @@ snapshots:
   sortablejs@1.15.7: {}
 
   source-map-js@1.2.1: {}
+
+  svelte-bricks@0.5.0(svelte@5.56.5):
+    dependencies:
+      svelte: 5.56.5
 
   svelte-check@4.7.3(picomatch@4.0.5)(svelte@5.56.5)(typescript@5.8.3):
     dependencies:

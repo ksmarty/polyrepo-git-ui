@@ -100,13 +100,16 @@ class AppState {
 
   async selectRepo(repo: Repository) {
     if (this.selectedRepo?.id === repo.id) return;
-    this.selectedRepo = repo;
-    this.gitLog = [];
-    this.gitStatus = null;
-    this.loadingGitLog = true;
-    await this.refreshRepo(repo.id);
-    await this.loadGitLog(repo.id);
-    await this.loadGitStatus(repo.id);
+    const id = repo.id;
+    const [fresh, status, log] = await Promise.all([
+      api.refreshRepo(id),
+      api.getGitStatus(id),
+      api.getGitLog(id, 20),
+    ]);
+    this.repos = this.repos.map(r => r.id === id ? fresh : r);
+    this.selectedRepo = fresh;
+    this.gitStatus = status;
+    this.gitLog = log;
   }
 
   async refreshRepo(id: string) {

@@ -122,56 +122,58 @@
       </button>
     </div>
   {:else}
-    <div class="auth-methods">
-      <div class="method">
-        <div class="method-header">
-          <GitBranch size={20} />
-          <h4>OAuth (Recommended)</h4>
+    <div class="auth-split">
+      <div class="auth-methods">
+        <div class="method">
+          <div class="method-header">
+            <GitBranch size={20} />
+            <h4>OAuth (Recommended)</h4>
+          </div>
+          <p>Use GitHub's OAuth flow for the best security. This opens your browser for authentication.</p>
+          <button class="oauth-button" onclick={startOAuth} disabled={loading}>
+            {loading ? 'Connecting...' : 'Connect with GitHub'}
+          </button>
         </div>
-        <p>Use GitHub's OAuth flow for the best security. This opens your browser for authentication.</p>
-        <button class="oauth-button" onclick={startOAuth} disabled={loading}>
-          {loading ? 'Connecting...' : 'Connect with GitHub'}
-        </button>
+
+        <div class="divider">
+          <span>or</span>
+        </div>
+
+        <div class="method">
+          <div class="method-header">
+            <KeyRound size={20} />
+            <h4>Personal Access Token</h4>
+          </div>
+          <p>Use a classic or fine-grained PAT for enterprise environments or when OAuth isn't available.</p>
+          <div class="pat-form">
+            <input type="password" bind:value={patToken} placeholder="ghp_xxxxxxxxxxxx" />
+            <button class="save-button" onclick={savePAT} disabled={loading || !patToken}>Save Token</button>
+          </div>
+        </div>
       </div>
 
-      <div class="divider">
-        <span>or</span>
-      </div>
-
-      <div class="method">
-        <div class="method-header">
-          <KeyRound size={20} />
-          <h4>Personal Access Token</h4>
+      <div class="permissions-info">
+        <h4>Token Types</h4>
+        <div class="token-type">
+          <h5>Fine-grained (recommended)</h5>
+          <p>Scoped to specific repos. No SSO authorization needed.</p>
+          <table>
+            <thead><tr><th>Permission</th><th>Access Level</th></tr></thead>
+            <tbody>
+              <tr><td>Contents</td><td>Read and Write</td></tr>
+              <tr><td>Pull requests</td><td>Read and Write</td></tr>
+              <tr><td>Metadata</td><td>Read-only</td></tr>
+              <tr><td>Commit statuses</td><td>Read-only</td></tr>
+            </tbody>
+          </table>
+          <p class="create-link"><a href="https://github.com/settings/tokens?type=beta" target="_blank">Create fine-grained token <ExternalLink size={12} /></a></p>
         </div>
-        <p>Use a classic or fine-grained PAT for enterprise environments or when OAuth isn't available.</p>
-        <div class="pat-form">
-          <input type="password" bind:value={patToken} placeholder="ghp_xxxxxxxxxxxx" />
-          <button class="save-button" onclick={savePAT} disabled={loading || !patToken}>Save Token</button>
+        <div class="token-type">
+          <h5>Classic</h5>
+          <p>Broader access. If your org uses SAML SSO, you must authorize the token for SSO after creating it.</p>
+          <p class="sso-steps">Settings > Tokens > <em>Configure SSO</em> > Authorize</p>
+          <p class="create-link"><a href="https://github.com/settings/tokens" target="_blank">Create classic token <ExternalLink size={12} /></a></p>
         </div>
-      </div>
-    </div>
-
-    <div class="permissions-info">
-      <h4>Token Types</h4>
-      <div class="token-type">
-        <h5>Fine-grained (recommended)</h5>
-        <p>Scoped to specific repos. No SSO authorization needed.</p>
-        <table>
-          <thead><tr><th>Permission</th><th>Access Level</th></tr></thead>
-          <tbody>
-            <tr><td>Contents</td><td>Read and Write</td></tr>
-            <tr><td>Pull requests</td><td>Read and Write</td></tr>
-            <tr><td>Metadata</td><td>Read-only</td></tr>
-            <tr><td>Commit statuses</td><td>Read-only</td></tr>
-          </tbody>
-        </table>
-        <p><a href="https://github.com/settings/tokens?type=beta" target="_blank">Create fine-grained token <ExternalLink size={12} /></a></p>
-      </div>
-      <div class="token-type">
-        <h5>Classic</h5>
-        <p>Broader access. If your org uses SAML SSO, you must authorize the token for SSO after creating it.</p>
-        <p class="sso-steps">Settings > Tokens > <em>Configure SSO</em> > Authorize</p>
-        <p><a href="https://github.com/settings/tokens" target="_blank">Create classic token <ExternalLink size={12} /></a></p>
       </div>
     </div>
   {/if}
@@ -179,6 +181,10 @@
 
 <style>
   .auth-setup { max-width: 500px; }
+
+  @media (min-width: 900px) {
+    .auth-setup { max-width: 800px; }
+  }
 
   h3 {
     font-size: 16px;
@@ -276,6 +282,21 @@
     gap: 16px;
   }
 
+  .auth-split {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  @media (min-width: 900px) {
+    .auth-split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+  }
+
   .method {
     background-color: var(--bg-secondary);
     border: 1px solid var(--border);
@@ -352,6 +373,10 @@
     padding: 20px;
   }
 
+  .permissions-info h4 {
+    margin-bottom: 16px;
+  }
+
   .permissions-info p {
     color: var(--text-secondary);
     font-size: 13px;
@@ -410,6 +435,10 @@
 
   .token-type p:last-child {
     margin-bottom: 0;
+  }
+
+  .create-link {
+    margin-top: 12px;
   }
 
   .sso-steps {

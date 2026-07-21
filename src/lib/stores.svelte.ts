@@ -1,4 +1,4 @@
-import type { Repository, RepoGroup, AppConfig } from './types';
+import type { Repository, RepoGroup, AppConfig, PullRequest } from './types';
 import type { GitLogEntry, MergeResult, GitStatus, PullResult } from './tauri';
 import * as api from './tauri';
 
@@ -27,6 +27,10 @@ class AppState {
   errorMsg: string | null = $state(null);
   showError: boolean = $state(false);
   notification: { type: 'success' | 'error'; message: string } | null = $state(null);
+  prs: PullRequest[] = $state([]);
+  loadingPrs: boolean = $state(false);
+  prsError: string | null = $state(null);
+  prsLoaded: boolean = $state(false);
 
   dismissError() {
     this.errorMsg = null;
@@ -36,6 +40,36 @@ class AppState {
   showNotification(type: 'success' | 'error', message: string) {
     this.notification = { type, message };
     setTimeout(() => { this.notification = null; }, 4000);
+  }
+
+  async loadPRs(force: boolean = false) {
+    if (this.loadingPrs) return;
+    this.loadingPrs = true;
+    this.prsError = null;
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const fresh: PullRequest[] = await invoke('get_all_prs');
+      if (!force && this.prsLoaded) {
+        const oldIds = this.prs.map(p => p.id).sort().join(',');
+        const newIds = fresh.map(p => p.id).sort().join(',');
+        if (oldIds === newIds) {
+          const changed = this.prs.some((old, i) =>
+            old.title !== fresh[i]?.title ||
+            old.state !== fresh[i]?.state ||
+            old.mergeable !== fresh[i]?.mergeable ||
+            old.checks_status !== fresh[i]?.checks_status ||
+            old.review_decision !== fresh[i]?.review_decision
+          );
+          if (!changed) return;
+        }
+      }
+      this.prs = fresh;
+      this.prsLoaded = true;
+    } catch (e) {
+      this.prsError = e instanceof Error ? e.message : 'Failed to load PRs';
+    } finally {
+      this.loadingPrs = false;
+    }
   }
 
   async loadAll() {

@@ -4,27 +4,11 @@
   import { RefreshCw, GitPullRequest } from '@lucide/svelte';
   import { app } from '../stores.svelte';
 
-  let prs: PullRequest[] = $state([]);
-  let loading: boolean = $state(false);
-  let error: string | null = $state(null);
   let filterRepo: string = $state('all');
   let filterStatus: string = $state('all');
 
-  async function loadPRs() {
-    loading = true;
-    error = null;
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      prs = await invoke('get_all_prs');
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to load PRs';
-    } finally {
-      loading = false;
-    }
-  }
-
   function getFilteredPRs(): PullRequest[] {
-    let filtered = prs;
+    let filtered = app.prs;
 
     if (filterRepo !== 'all') {
       filtered = filtered.filter(pr => pr.repo_id === filterRepo);
@@ -49,7 +33,7 @@
     return repo?.name ?? 'Unknown';
   }
 
-  loadPRs();
+  app.loadPRs();
 </script>
 
 <div class="pr-view">
@@ -70,18 +54,18 @@
         <option value="conflicts">Has Conflicts</option>
       </select>
 
-      <button class="refresh-btn" onclick={loadPRs} disabled={loading}>
-        <span class:spin={loading}><RefreshCw size={14} /></span>
+      <button class="refresh-btn" onclick={() => app.loadPRs(true)} disabled={app.loadingPrs}>
+        <span class:spin={app.loadingPrs}><RefreshCw size={14} /></span>
       </button>
     </div>
   </div>
 
-  {#if error}
+  {#if app.prsError}
     <div class="error">
-      <p>{error}</p>
-      <button onclick={loadPRs}>Retry</button>
+      <p>{app.prsError}</p>
+      <button onclick={() => app.loadPRs(true)}>Retry</button>
     </div>
-  {:else if loading && prs.length === 0}
+  {:else if app.loadingPrs && !app.prsLoaded}
     <div class="loading">
       <div class="spinner"></div>
       <p>Loading pull requests...</p>

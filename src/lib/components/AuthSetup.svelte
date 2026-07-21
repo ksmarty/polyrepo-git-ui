@@ -168,12 +168,19 @@
           </table>
           <p class="create-link"><a href="https://github.com/settings/tokens?type=beta" target="_blank">Create fine-grained token <ExternalLink size={12} /></a></p>
         </div>
-        <div class="token-type">
-          <h5>Classic</h5>
-          <p>Broader access. If your org uses SAML SSO, you must authorize the token for SSO after creating it.</p>
-          <p class="sso-steps">Settings > Tokens > <em>Configure SSO</em> > Authorize</p>
-          <p class="create-link"><a href="https://github.com/settings/tokens" target="_blank">Create classic token <ExternalLink size={12} /></a></p>
-        </div>
+      <div class="token-type">
+        <h5>Classic</h5>
+        <p>Broader access. If your org uses SAML SSO, you must authorize the token for SSO after creating it.</p>
+        <table>
+          <thead><tr><th>Scope</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td><code>repo</code></td><td>Full control of private repositories</td></tr>
+            <tr><td><code>read:org</code></td><td>Read organization membership</td></tr>
+          </tbody>
+        </table>
+        <p class="sso-steps">Settings > Tokens > <em>Configure SSO</em> > Authorize</p>
+        <p class="create-link"><a href="https://github.com/settings/tokens" target="_blank">Create classic token <ExternalLink size={12} /></a></p>
+      </div>
       </div>
     </div>
   {/if}

@@ -454,6 +454,15 @@
     padding: 24px;
   }
 
+  .section h3 {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+    letter-spacing: -0.02em;
+  }
+
   .section-header {
     display: flex;
     justify-content: space-between;

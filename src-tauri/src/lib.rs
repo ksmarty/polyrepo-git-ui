@@ -694,13 +694,6 @@ pub fn run() {
                     let _ = window.hide();
                 }
             }
-            if let tauri::WindowEvent::Focused(true) = event {
-                if window.is_visible().unwrap_or(false) {
-                    return;
-                }
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
         })
         .invoke_handler(tauri::generate_handler![
             get_repos,
@@ -750,8 +743,16 @@ pub fn run() {
             resolve_conflict,
             continue_merge,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::Reopen { .. } = event {
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+        });
 }
 
 #[tauri::command]

@@ -560,6 +560,46 @@
                 </div>
               {/if}
 
+              {#if app.selectedRepo.github_owner && app.selectedRepo.github_repo}
+                {@const repoPrs = app.prs.filter(pr => pr.repo_id === app.selectedRepo!.id)}
+                {#if repoPrs.length > 0}
+                  <div class="repo-card">
+                    <div class="repo-prs">
+                      <h3 class="section-title">
+                        <GitPullRequest size={14} />
+                        Pull Requests
+                        <a
+                          class="view-all-link"
+                          href="https://github.com/{app.selectedRepo.github_owner}/{app.selectedRepo.github_repo}/pulls"
+                          onclick={(e) => { e.preventDefault(); openUrl(`https://github.com/${app.selectedRepo!.github_owner}/${app.selectedRepo!.github_repo}/pulls`); }}
+                        >
+                          View all
+                          <ExternalLink size={10} />
+                        </a>
+                      </h3>
+                      <div class="repo-pr-list">
+                        {#each repoPrs as pr (pr.id)}
+                          <div class="repo-pr-row">
+                            <span class="repo-pr-status" class:success={pr.checks_status === 'success'} class:failure={pr.checks_status === 'failure'} class:pending={pr.checks_status === 'pending'}></span>
+                            <span class="repo-pr-number">#{pr.number}</span>
+                            <span class="repo-pr-title">{pr.title}</span>
+                            {#if pr.html_url}
+                              <button
+                                class="repo-pr-link"
+                                onclick={() => openUrl(pr.html_url)}
+                                title="Open in GitHub"
+                              >
+                                <ExternalLink size={12} />
+                              </button>
+                            {/if}
+                          </div>
+                        {/each}
+                      </div>
+                    </div>
+                  </div>
+                {/if}
+              {/if}
+
               <div class="repo-card">
                 <div class="git-history">
                   <h3 class="section-title">
@@ -617,46 +657,6 @@
                   {/if}
                 </div>
               </div>
-
-              {#if app.selectedRepo.github_owner && app.selectedRepo.github_repo}
-                {@const repoPrs = app.prs.filter(pr => pr.repo_id === app.selectedRepo!.id)}
-                {#if repoPrs.length > 0}
-                  <div class="repo-card">
-                    <div class="repo-prs">
-                      <h3 class="section-title">
-                        <GitPullRequest size={14} />
-                        Pull Requests
-                        <a
-                          class="view-all-link"
-                          href="https://github.com/{app.selectedRepo.github_owner}/{app.selectedRepo.github_repo}/pulls"
-                          onclick={(e) => { e.preventDefault(); openUrl(`https://github.com/${app.selectedRepo!.github_owner}/${app.selectedRepo!.github_repo}/pulls`); }}
-                        >
-                          View all
-                          <ExternalLink size={10} />
-                        </a>
-                      </h3>
-                      <div class="repo-pr-list">
-                        {#each repoPrs as pr (pr.id)}
-                          <div class="repo-pr-row">
-                            <span class="repo-pr-status" class:success={pr.checks_status === 'success'} class:failure={pr.checks_status === 'failure'} class:pending={pr.checks_status === 'pending'}></span>
-                            <span class="repo-pr-number">#{pr.number}</span>
-                            <span class="repo-pr-title">{pr.title}</span>
-                            {#if pr.html_url}
-                              <button
-                                class="repo-pr-link"
-                                onclick={() => openUrl(pr.html_url)}
-                                title="Open in GitHub"
-                              >
-                                <ExternalLink size={12} />
-                              </button>
-                            {/if}
-                          </div>
-                        {/each}
-                      </div>
-                    </div>
-                  </div>
-                {/if}
-              {/if}
             </div>
           {:else}
             <div class="empty-state">
